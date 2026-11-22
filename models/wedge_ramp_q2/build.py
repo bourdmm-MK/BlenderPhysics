@@ -10,7 +10,9 @@ Everything moves from the real equations (no hand-placed keyframes):
 - at the top both move at 2v and h = 6v^2/g; after separation v1 = 5v, v2 = v.
 
 Drawn in the shared course style (physkit.style; PhysicsAid knowledge/visual-style.md).
-Twins with the same timing: PhysicsAid expermients/wedge_ramp_q2/ (Manim + whiteboard).
+Twins with the same timing: PhysicsAid expermients/wedge_ramp_q2/ (Manim scene,
+HTML whiteboard, and compare.html that plays all three side by side).
+Labels are typeset by LaTeX (physkit.latex) at Manim's sizes, so they match Manim.
 
 Run:  .\\tools\\run.ps1 wedge_ramp_q2 -mode preview -still   (highest point)
       .\\tools\\run.ps1 wedge_ramp_q2 -mode preview          (video, ~30 s)
@@ -261,7 +263,8 @@ def row(items, z, buff):
             o = tex(val, EM(32), AUX, (x, FRONT, z), align="LEFT")
             x += o.dimensions.x + buff
         else:
-            o = number("+14.00", EM(32), AUX, (x, FRONT, z), name=val)
+            sample = {"e": "14.00", "p": "8.00", "k": "14.00", "u": "6.00"}.get(val, "+2.00")
+            o = number(sample, EM(32), AUX, (x, FRONT, z + 0.12 * EM(32)), name=val)
             bpy.context.view_layer.update()
             nums[val] = o
             x += o.dimensions.x + buff
