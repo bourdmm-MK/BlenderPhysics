@@ -10,8 +10,8 @@ friction. Counting all the collisions (block-block and block-wall) gives
     ...          ->  the first digits of pi.
 
 The video runs the system for M/m = 100^n, n = 0 ... N_STAGES-1, one after the
-other. The graph of N / 10^n against M/m is always on screen and fills in after
-each run, closing in on the dashed line at pi.
+other. The graph of how far N / 10^n is from pi (in percent, log scale: each
+step down is 10x closer) is always on screen and fills in after each run.
 
 Physics: exact event-by-event simulation (no time step): between collisions
 the blocks move at constant speed; each collision uses the elastic-collision
@@ -289,71 +289,82 @@ def hud_disc(name, x, y, r, color):
     return o
 
 
-AXES, AUX, POINT, WHITE = COURSE["axes"], COURSE["aux"], COURSE["position"], COURSE["time"]
+AXES, AUX, WHITE = COURSE["axes"], COURSE["aux"], COURSE["time"]
+OFF = COURSE["displacement"]     # orange: the distance from the goal (pi)
 HALF_W, HALF_H = HUD_W / 2, HUD_W * 9 / 32
 
-# --- left: live counter, pi, current mass ratio
+# --- left: mass ratio, live counter, pi, result of the last run
 LX = -HALF_W + 0.18
-hud_tex(r"\text{Collisions:}", 36, AUX, LX, HALF_H - 0.20, name="lbl_collisions")
-counter = number("0", EM(48), WHITE, name="counter")
-hud_obj(counter, LX + 0.62, HALF_H - 0.20)
-hud_tex(r"\pi = 3.14159265\ldots", 36, AUX, LX, HALF_H - 0.42, name="lbl_pi")
 stage_labels = []
 for n in range(N_STAGES):
     body = r"\frac{M}{m} = 1" if n == 0 else rf"\frac{{M}}{{m}} = 10^{{{2 * n}}}"
-    stage_labels.append(hud_tex(body, 36, WHITE, LX, HALF_H - 0.72, name=f"stage_{n}"))
+    stage_labels.append(hud_tex(body, 34, WHITE, LX, HALF_H - 0.20, name=f"stage_{n}"))
+hud_tex(r"\text{Collisions:}", 34, AUX, LX, HALF_H - 0.44, name="lbl_collisions")
+counter = number("0", EM(44), WHITE, name="counter")
+hud_obj(counter, LX + 0.58, HALF_H - 0.44)
+hud_tex(r"\pi = 3.14159265\ldots", 30, AUX, LX, HALF_H - 0.64, name="lbl_pi")
 
-slow = number("", EM(28), COURSE["velocity"], name="slow_motion")
-hud_obj(slow, LX, HALF_H - 0.98)
 
-# --- right: graph of N / 10^n against M/m (log scale)
-GX0, GY0 = 0.10, -0.08                # axes origin (HUD metres)
-GW, GH = 1.75, 1.05
-Y_LO, Y_HI = 2.95, 3.20
+def error_pct(n):
+    """How far N/10^n is from pi, in percent of pi."""
+    return abs(STAGES[n]["count"] / 10 ** n - math.pi) / math.pi * 100
+
+
+def pct_text(e):
+    """Two significant figures, plain decimals (no 1e-5 notation)."""
+    return f"{e:.{max(0, 1 - math.floor(math.log10(e)))}f}"
+
+
+# the result of each run: the estimate and how far it is from pi
+est_labels, off_labels = [], []
+for n, st in enumerate(STAGES):
+    est = f"{st['count'] / 10 ** n:.{n}f}"
+    est_labels.append(hud_tex(rf"\text{{estimate}} = {est}", 30, WHITE, LX, HALF_H - 0.81, name=f"est_{n}"))
+    off_labels.append(hud_tex(rf"\text{{off by }} {pct_text(error_pct(n))}\,\%", 30, OFF, LX,
+                              HALF_H - 0.98, name=f"off_{n}"))
+
+# --- right: graph of the distance from pi (percent, log scale) against M/m
+GX0, GY0 = 0.12, -0.08                # axes origin (HUD metres)
+GW, GH = 1.73, 1.10
+DEC_TOP, DEC_BOT = 1, -5               # 10 % ... 0.00001 %
 
 
 def gx(n):
-    return GX0 + 0.16 + n * (GW - 0.30) / (N_STAGES - 1)
+    return GX0 + 0.16 + n * (GW - 0.32) / (N_STAGES - 1)
 
 
-def gy(v):
-    return GY0 + (v - Y_LO) / (Y_HI - Y_LO) * (GH - 0.12)
+def gy(err_pct):
+    return GY0 + 0.07 + (math.log10(err_pct) - DEC_BOT) / (DEC_TOP - DEC_BOT) * (GH - 0.20)
 
 
-# dashed pi line and grid ticks first (behind), then axes, then points
-y_pi = gy(math.pi)
-x = GX0
-i = 0
-while x < GX0 + GW - 0.08:
-    hud_seg(f"pi_dash{i}", (x, y_pi), (min(x + 0.035, GX0 + GW - 0.08), y_pi), 0.005, AUX, z=-HUD_D - 0.002)
-    x += 0.06
-    i += 1
-hud_tex(r"\pi", 32, AUX, GX0 + GW - 0.04, y_pi, name="pi_mark")
 hud_arrow("x_axis", (GX0, GY0), (GX0 + GW, GY0), AXES)
 hud_arrow("y_axis", (GX0, GY0), (GX0, GY0 + GH), AXES)
-for v in (3.0, 3.1, 3.2):
-    hud_seg(f"ytick{v}", (GX0 - 0.025, gy(v)), (GX0 + 0.025, gy(v)), 0.006, AXES)
-    hud_tex(f"{v:.1f}", 22, AUX, GX0 - 0.05, gy(v), align="RIGHT", name=f"ylab{v}")
+for d in range(DEC_BOT, DEC_TOP + 1):
+    y = gy(10.0 ** d)
+    hud_seg(f"ytick{d}", (GX0 - 0.025, y), (GX0 + 0.025, y), 0.006, AXES)
+    lab = "1" if d == 0 else (f"{10 ** d}" if d > 0 else f"0.{'0' * (-d - 1)}1")
+    hud_tex(rf"{lab}\,\%", 20, AUX, GX0 - 0.05, y, align="RIGHT", name=f"ylab{d}")
 for n in range(N_STAGES):
     hud_seg(f"xtick{n}", (gx(n), GY0 - 0.025), (gx(n), GY0 + 0.025), 0.006, AXES)
     hud_tex("1" if n == 0 else f"10^{{{2 * n}}}", 20, AUX, gx(n), GY0 - 0.08, align="CENTER", name=f"xlab{n}")
 hud_tex(r"M/m", 26, AUX, GX0 + GW, GY0 - 0.17, align="RIGHT", name="x_name")
-hud_tex(r"N/10^{\,n}", 26, AUX, GX0 + 0.06, GY0 + GH + 0.02, name="y_name")
+hud_tex(r"\text{off from }\pi\quad(\text{lower} = \text{closer})", 24, AUX, GX0 + 0.06, GY0 + GH + 0.03,
+        name="y_name")
+
+slow = number("", EM(28), COURSE["velocity"], name="slow_motion")
+hud_obj(slow, GX0, GY0 - 0.30)
 
 points, links, values = [], [], []
 for n, st in enumerate(STAGES):
-    v = st["count"] / 10 ** n
-    p = hud_disc(f"point_{n}", gx(n), gy(v), 0.022, POINT)
+    e = error_pct(n)
+    p = hud_disc(f"point_{n}", gx(n), gy(e), 0.022, OFF)
     points.append(p)
     if n:
-        pv = STAGES[n - 1]["count"] / 10 ** (n - 1)
-        links.append(hud_seg(f"link_{n}", (gx(n - 1), gy(pv)), (gx(n), gy(v)), 0.006, POINT,
+        links.append(hud_seg(f"link_{n}", (gx(n - 1), gy(error_pct(n - 1))), (gx(n), gy(e)), 0.006, OFF,
                              z=-HUD_D + 0.001))
     else:
         links.append(None)
-    # the count itself, written above/below the point
-    val = hud_tex(f"{st['count']}", 20, POINT, gx(n), gy(v) + (0.07 if v < math.pi - 0.03 or n % 2 else -0.07),
-                  align="CENTER", name=f"value_{n}")
+    val = hud_tex(rf"{pct_text(e)}\,\%", 20, OFF, gx(n) + 0.03, gy(e) + 0.06, align="LEFT", name=f"value_{n}")
     values.append(val)
 
 for o in hud:
@@ -381,6 +392,9 @@ for n, st in enumerate(STAGES):
             pop(o, f_done)
     f_off = frame_of(STAGES[n + 1]["start"]) if n + 1 < N_STAGES else None
     pop(stage_labels[n], frame_of(st["start"]), f_off)
+    f_next = frame_of(STAGES[n + 1]["run_start"] + STAGES[n + 1]["run"]) - 2 if n + 1 < N_STAGES else None
+    pop(est_labels[n], f_done, f_next)
+    pop(off_labels[n], f_done, f_next)
 
 # live counter value per frame
 counts_by_frame = [0] * (F_END + 2)
