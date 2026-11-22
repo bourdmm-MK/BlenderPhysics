@@ -1,0 +1,72 @@
+# BlenderPhysics
+
+3D models of objects and physical systems for physics teaching, built in
+**Blender 5.3** with Python scripts.
+
+Every model is a script, not a hand-saved `.blend` file. The script builds the
+scene from scratch: shapes, materials, camera, lights and, when it moves, the
+motion computed from the real physics equations. So a model can be read,
+changed (a longer string, a steeper slope…) and rebuilt in seconds.
+
+## Folder layout
+
+| Folder | What is in it |
+|---|---|
+| `models/<name>/build.py` | One folder per model. `build.py` builds it. Notes or reference images for that model go next to it. |
+| `lib/physkit/` | Shared building blocks used by all models: empty scene in metres, camera, lights, material palette, render settings. |
+| `experiments/` | First standalone tests (bouncing ball, pendulum wave, solar system), kept as written. See its README. |
+| `tools/run.ps1` | Builds a model without opening Blender, and can render it. |
+| `output/<name>/` | Results: the `.blend` file, images, videos. **Not stored in git** (it is rebuilt from the scripts). Final videos worth keeping go to Dropbox. |
+
+## Using it
+
+Run these from the `BlenderPhysics` folder in PowerShell.
+
+Build the model and save `output\pendulum\pendulum.blend`:
+
+```powershell
+.\tools\run.ps1 pendulum
+```
+
+Build it and open it in Blender to look around or keep modelling by hand:
+
+```powershell
+.\tools\run.ps1 pendulum -open
+```
+
+Quick preview image, or video (≈0.1 s per frame):
+
+```powershell
+.\tools\run.ps1 pendulum -mode preview -still
+```
+
+```powershell
+.\tools\run.ps1 pendulum -mode preview
+```
+
+Realistic video (Eevee, ≈2–3 s per frame at 720p, so ≈1 minute per second of video):
+
+```powershell
+.\tools\run.ps1 pendulum -mode final
+```
+
+Add `-resolution 1080` for full HD.
+
+If PowerShell refuses to run the script, start it with
+`powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 pendulum`.
+
+## Models
+
+| Model | What it shows |
+|---|---|
+| `pendulum` | Stand, string and bob. The swing comes from solving θ'' = −(g/L)·sin θ, not from hand animation. Length, start angle and gravity are at the top of the script. |
+
+## Adding a new model
+
+1. Copy `models/pendulum/` to `models/<new-name>/`.
+2. Change the parameters and shapes in `build.py`; keep the
+   `physkit.finish(scene, "<new-name>", args)` line at the end.
+3. Run `.\tools\run.ps1 <new-name> -mode preview -still` and look at the image.
+4. Add a line to the Models table above.
+
+Units are SI throughout: 1 Blender unit = 1 metre, time in seconds.

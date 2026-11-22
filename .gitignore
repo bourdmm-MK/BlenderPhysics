@@ -1,0 +1,22 @@
+# Rebuilt from the scripts; keep finals in Dropbox
+output/
+*.blend1
+*.blend2
+
+# Media never goes in git
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.mp3
+*.exr
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+Thumbs.db
+desktop.ini
