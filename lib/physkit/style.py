@@ -36,12 +36,18 @@ COURSE = {
 LABEL_FONT = r"C:\Windows\Fonts\timesi.ttf"   # closest installed serif italic to LaTeX
 
 
-def apply_question_style(scene):
-    """Flat Workbench colours on black, exactly as in the Manim course."""
+def apply_question_style(scene, lighting: str = "FLAT"):
+    """Flat Workbench colours on black, exactly as in the Manim course.
+
+    lighting="STUDIO" keeps the course colours but shades the faces, for
+    question scenes shown in 3D (style "question3d").
+    """
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.view_settings.view_transform = "Standard"
     shading = scene.display.shading
-    shading.light = "FLAT"
+    shading.light = lighting
+    if lighting == "STUDIO":
+        shading.studio_light = "basic.sl"   # clearest of the built-in studio lights
     shading.color_type = "OBJECT"
     shading.show_shadows = False
     shading.show_cavity = False

@@ -60,6 +60,7 @@ If PowerShell refuses to run the script, start it with
 | Model | What it shows |
 |---|---|
 | `pendulum` | Stand, string and bob. The swing comes from solving θ'' = −(g/L)·sin θ, not from hand animation. Length, start angle and gravity are at the top of the script. |
+| `collision_pi` | Colliding blocks count π: a big block (M = 100ⁿ kg) pushes a 1 kg block against a wall; all elastic collisions are counted (3, 31, 314 … 3 141 592) for n = 0…6, while a graph of N/10ⁿ closes in on π. Exact event-by-event solution; labelled slow motion where collisions pile up; generated sound track (a "tock" per collision, a tone when they come too fast to hear, a bell per graph point). 3D course style (`style="question3d"`). ≈1 min video. |
 | `two_slopes_spring` | Exam question: m and 2m slide down 60° slopes, hit m₃ = 3m on a spring at the same moment, stick, and oscillate. Drawn in the course style (flat 2D look on black). A Manim twin is in PhysicsAid `expermients/two_slopes_spring/`. `-mode preview -still` renders the impact frame. |
 
 ## Two looks
@@ -69,7 +70,8 @@ If PowerShell refuses to run the script, start it with
   `physkit/style.py` — black background, flat colours by meaning, serif italic labels,
   mass labels inside bodies, axes behind objects. Call
   `physkit.finish(scene, name, args, style="question")`. The full rules are in
-  AnimateSystem `style/visual-style.md`.
+  AnimateSystem `style/visual-style.md`. `style="question3d"` (like `collision_pi`)
+  keeps the same colours but shades the faces, for scenes seen in 3D.
 
 ## Adding a new model
 

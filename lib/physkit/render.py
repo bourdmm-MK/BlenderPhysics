@@ -12,14 +12,15 @@ def configure_render(scene, mode: str, height: int = 720, style: str = "model"):
     """Set up the quick (Workbench) or realistic (Eevee) engine.
 
     style="question": the flat course look (see style.py) in every mode.
+    style="question3d": the same colours with shaded 3D faces.
     """
     scene.render.resolution_y = height
     scene.render.resolution_x = round(height * 16 / 9)
     scene.render.resolution_percentage = 100
     scene.view_settings.view_transform = "Standard"  # punchier colours than AgX
-    if style == "question":
+    if style in ("question", "question3d"):
         from .style import apply_question_style
-        apply_question_style(scene)
+        apply_question_style(scene, "STUDIO" if style == "question3d" else "FLAT")
     elif mode == "final":
         try:
             scene.render.engine = "BLENDER_EEVEE"
@@ -62,6 +63,9 @@ def finish(scene, model_name: str, args, style: str = "model", still_frame=None)
         settings.file_format = "FFMPEG"
         scene.render.ffmpeg.format = "MPEG4"
         scene.render.ffmpeg.codec = "H264"
+        if len(bpy.data.sounds):  # the model added a sound track
+            scene.render.ffmpeg.audio_codec = "AAC"
+            scene.render.ffmpeg.audio_bitrate = 192
         scene.render.filepath = str(out_dir / f"{model_name}_{args.mode}.mp4")
         bpy.ops.render.render(animation=True)
     print(f"[physkit] rendered {scene.render.filepath}")
