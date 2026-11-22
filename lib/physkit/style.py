@@ -1,6 +1,6 @@
 """The shared PhysicsAid visual style for physics-question scenes.
 
-Source of truth: `knowledge/visual-style.md` in the PhysicsAid repository (it
+Source of truth: `style/visual-style.md` in the AnimateSystem repository (it
 inherits the Manim course style). Black background, flat colours by meaning,
 serif italic labels, mass labels inside bodies, axes behind objects.
 

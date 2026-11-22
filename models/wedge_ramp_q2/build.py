@@ -24,7 +24,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 import bpy  # noqa: E402
 
 import physkit  # noqa: E402
-from physkit.style import COURSE, label_font  # noqa: E402
+from physkit.latex import manim_em, number, tex  # noqa: E402
+from physkit.style import COURSE  # noqa: E402
 
 # ---------------- physics (SI units, m = 1 kg) ----------------
 g = 9.81
@@ -62,12 +63,15 @@ def state(t):
     return X2e + v * te, X2e + 5 * v * te, 0.0, (5 * v, 0.0), v, "after"
 
 
+
+# Captions and labels are typeset by LaTeX (physkit.latex), with the same sizes
+# and positions as the Manim twin, so both look the same.
 CAPTIONS = {
-    "before": "Before contact",
-    "up": "m1 slides up the ramp (no friction)",
-    "top": "Highest point: both move at 2v,  h = 6v²/g",
-    "down": "m1 slides back down",
-    "after": "After separation: v1 = 5v,  v2 = v",
+    "before": r"Before contact",
+    "up": r"$m_1$ slides up the ramp (no friction)",
+    "top": r"Highest point: both move at $2v$, \ $h=6v^2/g$",
+    "down": r"$m_1$ slides back down",
+    "after": r"After separation: $v_1=5v$, \ $v_2=v$",
 }
 
 # ---------------- scene (course style: flat colours on black) ----------------
@@ -78,9 +82,25 @@ sc.frame_start, sc.frame_end = 1, N_FRAMES
 
 SAND, INSIDE = COURSE["body"], COURSE["body_text"]
 AUX, STRUCT, AXES, VEL = COURSE["aux"], COURSE["structure"], COURSE["axes"], COURSE["velocity"]
-FONT = label_font()
 DEPTH = 0.5
 FRONT, BACK = -0.4, 0.4
+
+# framing: identical sampling to the Manim scene and the whiteboard
+c2, c1 = H2 * COS / SIN, H1 * COS / SIN
+ARROW_K = 1.3 / (5 * v)
+_xs = []
+for _i in range(240):
+    _X2, _x1, _, (_v1x, _), _, _ = state(_i / 239 * T_TOTAL)
+    _xs += [_X2 - c2 - 1.3, _x1 + 0.45 + max(_v1x, 0) * ARROW_K + 0.3]
+xmin, xmax = min(_xs) - 0.4, max(_xs) + 0.4
+cx, width = (xmin + xmax) / 2, xmax - xmin
+cz = 1.0
+half_h = width * 9 / 16 / 2
+UNIT = width / 14.2222          # one Manim unit in metres
+
+
+def EM(font_size):
+    return manim_em(font_size, width)
 
 
 def prism(name, pts, color):
@@ -104,28 +124,6 @@ def prism(name, pts, color):
     return o
 
 
-def text(body, loc, size=0.2, color=AUX, align="CENTER", y=FRONT):
-    cu = bpy.data.curves.new("txt", "FONT")
-    cu.body, cu.font, cu.size = body, FONT, size
-    cu.align_x, cu.align_y = align, "CENTER"
-    o = bpy.data.objects.new("txt", cu)
-    sc.collection.objects.link(o)
-    o.location = (loc[0], y, loc[1])
-    o.rotation_euler = (math.radians(90), 0, 0)
-    o.color = color + (1,)
-    return o
-
-
-def label(main, sub, loc, size, color):
-    """Letter with a real (smaller, lower) subscript, e.g. m_1."""
-    o = text(main, loc, size, color)
-    s = text(sub, (0, 0), size * 0.6, color)
-    s.parent = o
-    s.rotation_euler = (0, 0, 0)
-    s.location = (size * 0.45, -size * 0.25, 0)
-    return o
-
-
 def box(name, size, color, loc, rot_y=0.0):
     bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
     o = bpy.context.object
@@ -134,12 +132,12 @@ def box(name, size, color, loc, rot_y=0.0):
     return o
 
 
-def arrow_static(p, q, color, width=0.02, head=0.12):
+def arrow_static(p, q, color, width_=0.02, head=0.12):
     dx, dz = q[0] - p[0], q[1] - p[1]
     L = math.hypot(dx, dz)
     ux, uz = dx / L, dz / L
     e = (q[0] - ux * head, q[1] - uz * head)
-    box("seg", (math.hypot(e[0] - p[0], e[1] - p[1]), 0.01, width), color,
+    box("seg", (math.hypot(e[0] - p[0], e[1] - p[1]), 0.01, width_), color,
         ((p[0] + e[0]) / 2, BACK, (p[1] + e[1]) / 2), rot_y=-math.atan2(dz, dx))
     bpy.ops.mesh.primitive_cone_add(radius1=head * 0.45, depth=head,
                                     location=(q[0] - ux * head / 2, BACK, q[1] - uz * head / 2))
@@ -148,23 +146,22 @@ def arrow_static(p, q, color, width=0.02, head=0.12):
     c.color = color + (1,)
 
 
-# bodies (same outlines as the question figure)
-c2, c1 = H2 * COS / SIN, H1 * COS / SIN
+def inside(label, body):
+    """Parent a label to its body (bodies are built at the origin)."""
+    label.parent = body
+    return label
+
+
+# bodies (same outlines as the question figure), labels INSIDE (Manim sizes)
 m2 = prism("m2", [(0, 0), (-c2, H2), (-c2 - 1.3, H2), (-c2 - 1.3, 0)], SAND)
 m1 = prism("m1", [(0, 0), (0.45, 0), (0.45, H1), (-c1, H1)], SAND)
-L2 = label("m", "2", (-c2 - 0.7, 0.5), 0.55, INSIDE)
-L1 = label("m", "1", (0.17, 0.2), 0.27, INSIDE)
-for L, body in ((L2, m2), (L1, m1)):
-    L.parent = body
-th2 = text("θ", (-0.55, 0.12), 0.26, INSIDE)        # angle at m2's ramp foot
-th2.parent = m2
-th1 = text("θ", (-c1 + 0.42, H1 - 0.12), 0.22, INSIDE)  # matching angle on m1
-th1.parent = m1
+inside(tex("m_2", EM(64), INSIDE, (-c2 - 0.65, FRONT, 0.5)), m2)
+inside(tex(r"\theta", EM(34), INSIDE, (-0.55, FRONT, 0.12)), m2)
+inside(tex("m_1", EM(32), INSIDE, (0.2, FRONT, 0.2)), m1)
+inside(tex(r"\theta", EM(30), INSIDE, (-c1 + 0.42, FRONT, H1 - 0.12)), m1)
+
 
 # velocity arrows (yellow), starting on top of their body: root -> scaled shaft + head
-ARROW_K = 1.3 / (5 * v)
-
-
 def make_arrow(name):
     root = bpy.data.objects.new(name, None)
     sc.collection.objects.link(root)
@@ -186,8 +183,8 @@ def make_arrow(name):
 
 
 arr1, arr2 = make_arrow("v1"), make_arrow("v2")
-lab1 = label("v", "1", (0, 0), 0.34, VEL)
-lab2 = label("v", "2", (0, 0), 0.34, VEL)
+lab1 = tex(r"\vec v_1", EM(36), VEL)
+lab2 = tex(r"\vec v_2", EM(36), VEL)
 
 
 def key_arrow(parts, lab, origin, vx, vz, f):
@@ -198,30 +195,31 @@ def key_arrow(parts, lab, origin, vx, vz, f):
     root.rotation_euler = (0, -ang, 0)
     pivot.scale = (max(L - 0.15, 0.001), 1, 1)
     head.location = (L - 0.08, 0, 0)
-    lab.location = (origin[0] + 0.5 * L * math.cos(ang) - 0.28 * math.sin(ang), FRONT,
-                    origin[1] + 0.5 * L * math.sin(ang) + 0.28 * math.cos(ang))
+    lab.location = (origin[0] + 0.5 * L * math.cos(ang) - 0.2 * math.sin(ang), FRONT,
+                    origin[1] + 0.5 * L * math.sin(ang) + 0.22 * math.cos(ang))
     for o, p in ((root, "location"), (root, "rotation_euler"), (pivot, "scale"),
                  (head, "location"), (lab, "location")):
         o.keyframe_insert(p, frame=f)
 
 
-xs = []
+# captions: one LaTeX object per stage, shown only during its stage
+caps = {k: tex(c, EM(40), AUX, (cx, FRONT, cz + half_h - 0.45), math_mode=False, name="cap_" + k)
+        for k, c in CAPTIONS.items()}
+
 for f in range(1, N_FRAMES + 1):
     t = (f - 1) / (FPS * SLOW)
-    X2, x1, z1, (v1x, v1z), v2x, _ = state(t)
+    X2, x1, z1, (v1x, v1z), v2x, phase = state(t)
     m2.location = (X2, 0, 0)
     m2.keyframe_insert("location", frame=f)
     m1.location = (x1, 0, z1)
     m1.keyframe_insert("location", frame=f)
     key_arrow(arr2, lab2, (X2 - c2 - 0.65, H2 + 0.08), v2x, 0, f)
     key_arrow(arr1, lab1, (x1 + 0.1, z1 + H1 + 0.08), v1x, v1z, f)
-    xs += [X2 - c2 - 1.3, x1 + 0.45 + max(v1x, 0) * ARROW_K + 0.3]
+    for k, o in caps.items():
+        o.hide_render = (k != phase)
+        o.keyframe_insert("hide_render", frame=f)
 
-# frame the whole motion (orthographic front view, like the question figure)
-xmin, xmax = min(xs) - 0.4, max(xs) + 0.4
-cx, width = (xmin + xmax) / 2, xmax - xmin
-cz = 1.0
-half_h = width * 9 / 16 / 2
+# orthographic front camera, like the question figure
 cam_d = bpy.data.cameras.new("cam")
 cam_d.type, cam_d.ortho_scale = "ORTHO", width
 cam = bpy.data.objects.new("cam", cam_d)
@@ -234,29 +232,65 @@ sc.camera = cam
 box("floor", (60, 0.3, 0.03), STRUCT, (cx, 0, -0.015))
 for i in range(int(width / 0.25) + 2):
     hx = xmin + i * 0.25
-    box("hatch", (0.18, 0.01, 0.015), STRUCT, (hx, BACK, -0.08), rot_y=math.radians(55))
+    box("hatch", (0.18, 0.01, 0.015), STRUCT, (hx, BACK, -0.08), rot_y=math.radians(-55))
 ax0 = (xmax - 1.6, cz + half_h - 2.1)
 arrow_static(ax0, (ax0[0] + 0.6, ax0[1]), AXES)
 arrow_static(ax0, (ax0[0], ax0[1] + 0.6), AXES)
-text("x", (ax0[0] + 0.78, ax0[1] - 0.05), 0.4, AXES)
-text("y", (ax0[0] - 0.16, ax0[1] + 0.66), 0.4, AXES)
+tex("x", EM(48), AXES, (ax0[0] + 0.72, FRONT, ax0[1] - 0.05))
+tex("y", EM(48), AXES, (ax0[0] - 0.12, FRONT, ax0[1] + 0.62))
 
-# live text: stage caption (top) and readouts (bottom), helper colour
-caption = text("", (cx, cz + half_h - 0.5), 0.5)
-readout = text("", (xmin + 0.3, cz - half_h + 0.75), 0.36, align="LEFT")
-text(f"slow motion x{SLOW}", (xmax - 0.3, cz - half_h + 0.45), 0.3, align="RIGHT")
+# "slow motion x5" in the bottom-right corner (Manim: to_corner(DR, buff=0.35))
+# (the LaTeX \times outline imports badly, so the "x5" uses the LaTeX text font)
+slow_n = number(f"\u00d7{SLOW}", EM(28), AUX, name="slow_n")
+bpy.context.view_layer.update()
+slow = tex(r"slow motion", EM(28), AUX, math_mode=False)
+_right, _bottom = xmax - 0.35 * UNIT, cz - half_h + 0.35 * UNIT
+slow_n.location = (_right - slow_n.dimensions.x, FRONT, _bottom + slow.dimensions.y / 2)
+slow.location = (_right - slow_n.dimensions.x - 0.06 * UNIT - slow.dimensions.x / 2, FRONT,
+                 _bottom + slow.dimensions.y / 2)
+
+# live readouts (bottom-left): LaTeX pieces + changing numbers in the LaTeX font
+nums = {}
+
+
+def row(items, z, buff):
+    """Lay out LaTeX pieces and number slots left to right, centred on height z."""
+    x = xmin + 0.35 * UNIT
+    for kind, val in items:
+        if kind == "t":
+            o = tex(val, EM(32), AUX, (x, FRONT, z), align="LEFT")
+            x += o.dimensions.x + buff
+        else:
+            o = number("+14.00", EM(32), AUX, (x, FRONT, z), name=val)
+            bpy.context.view_layer.update()
+            nums[val] = o
+            x += o.dimensions.x + buff
+
+
+bottom = cz - half_h + 0.35 * UNIT
+h_row = EM(32) * 1.0
+row([("t", r"p_x="), ("n", "p"), ("t", r"\,mv \qquad E="), ("n", "e"),
+     ("t", r"\,mv^2 \ \ (K="), ("n", "k"), ("t", r"+\ U_g="), ("n", "u"), ("t", ")")],
+    bottom + h_row / 2, 0.12 * UNIT)
+row([("t", r"\vec v_1=("), ("n", "v1x"), ("t", ","), ("n", "v1z"),
+     ("t", r")\,v \qquad v_2="), ("n", "v2"), ("t", "v")],
+    bottom + h_row * 1.5 + 0.15 * UNIT, 0.08 * UNIT)
+
+
+def fmt(x, sign):
+    s = f"{x:+.2f}" if sign else f"{x:.2f}"
+    return s.replace("-", "−")
 
 
 def update(scene, *_):
     t = (scene.frame_current - 1) / (FPS * SLOW)
-    X2, x1, z1, (v1x, v1z), v2x, phase = state(t)
-    caption.data.body = CAPTIONS[phase]
+    X2, x1, z1, (v1x, v1z), v2x, _ = state(t)
     ke = 0.5 * (v1x ** 2 + v1z ** 2) + 1.5 * v2x ** 2
     pe = g * z1
-    readout.data.body = (
-        f"v1 = ({v1x / v:+.2f}, {v1z / v:+.2f}) v        v2 = {v2x / v:+.2f} v\n"
-        f"p_x = {(v1x + 3 * v2x) / v:.2f} mv        E = {(ke + pe) / v ** 2:.2f} mv²"
-        f"  (kinetic {ke / v ** 2:.1f} + potential {pe / v ** 2:.1f})")
+    for key, val, sign in (("v1x", v1x / v, True), ("v1z", v1z / v, True), ("v2", v2x / v, True),
+                           ("p", (v1x + 3 * v2x) / v, False), ("e", (ke + pe) / v ** 2, False),
+                           ("k", ke / v ** 2, False), ("u", pe / v ** 2, False)):
+        nums[key].data.body = fmt(val, sign)
 
 
 bpy.app.handlers.frame_change_pre.append(update)

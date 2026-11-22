@@ -69,7 +69,7 @@ If PowerShell refuses to run the script, start it with
   `physkit/style.py` — black background, flat colours by meaning, serif italic labels,
   mass labels inside bodies, axes behind objects. Call
   `physkit.finish(scene, name, args, style="question")`. The full rules are in
-  PhysicsAid `knowledge/visual-style.md`.
+  AnimateSystem `style/visual-style.md`.
 
 ## Adding a new model
 
