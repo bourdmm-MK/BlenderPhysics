@@ -17,6 +17,9 @@ video with ffmpeg (`ffmpeg -framerate 24 -i %04d.png -c:v libx264 -pix_fmt yuv42
 time; `phases` lights the planets from the Sun to show lit halves; `moonview`
 renders a small "Moon seen from Earth" inset (combined with the main video in ffmpeg).
 
+The rendered test videos are in Dropbox: `PhysicaAid\Blender renders\experiments 2026-11-22`
+(the workspace `../README.md` maps it to the real folder).
+
 ## Lessons from these tests (this computer, Intel Iris Xe)
 
 - Workbench preview: ≈0.1 s/frame. Use it for every draft.
