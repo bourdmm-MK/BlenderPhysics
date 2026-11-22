@@ -525,4 +525,90 @@ if wav.exists():
 st4 = STAGES[min(4, N_STAGES - 1)]
 still = frame_of(st4["run_start"] + st4["hits"][len(st4["hits"]) // 2])
 update(sc)
-physkit.finish(sc, NAME, args, style="question3d", still_frame=still)
+
+
+SCENE_EXPOSURE = 0.7     # brightens the shaded 3D layer back towards the course colours
+
+
+def render_two_layers(scene, still_frame):
+    """Render the 3D scene (shaded) and the text/graph (flat, full colour) separately,
+    then lay the text over the 3D picture with ffmpeg. One Workbench lighting for both
+    would dim the text; this keeps the blocks solid-looking and the labels crisp.
+    """
+    import shutil
+    import subprocess
+    from physkit.render import configure_render
+    from physkit.style import apply_question_style
+
+    hud_set = set(hud) | {counter, slow}
+    world_objs = [o for o in scene.objects if o not in hud_set and o.type != "CAMERA"]
+    configure_render(scene, args.mode, args.resolution, style="question3d")
+    settings = scene.render.image_settings
+
+    def as_png(path):
+        if hasattr(settings, "media_type"):
+            settings.media_type = "IMAGE"
+        settings.file_format = "PNG"
+        settings.color_mode = "RGBA"
+        scene.render.filepath = str(path)
+
+    tmp = out_dir / "_layers"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir()
+    # layer 1: 3D blocks with shading, no text
+    for o in hud_set:
+        o.hide_render = True
+    scene.view_settings.exposure = SCENE_EXPOSURE
+    if still_frame:
+        scene.frame_set(still_frame)
+        as_png(tmp / "scene.png")
+        bpy.ops.render.render(write_still=True)
+    else:
+        if hasattr(settings, "media_type"):
+            settings.media_type = "VIDEO"
+        settings.file_format = "FFMPEG"
+        scene.render.ffmpeg.format = "MPEG4"
+        scene.render.ffmpeg.codec = "H264"
+        scene.render.ffmpeg.constant_rate_factor = "HIGH"
+        scene.render.ffmpeg.audio_codec = "AAC"
+        scene.render.ffmpeg.audio_bitrate = 192
+        scene.render.filepath = str(tmp / "scene.mp4")
+        bpy.ops.render.render(animation=True)
+    # layer 2: text and graph only, flat full colours on a transparent background
+    for o in hud_set:
+        o.hide_render = False
+    for o in world_objs:
+        o.hide_render = True
+    apply_question_style(scene, "FLAT")
+    scene.view_settings.exposure = 0.0
+    scene.render.film_transparent = True
+    if still_frame:
+        scene.frame_set(still_frame)
+        as_png(tmp / "hud.png")
+        bpy.ops.render.render(write_still=True)
+        src, hud_in, out = ["-i", str(tmp / "scene.png")], ["-i", str(tmp / "hud.png")],             out_dir / f"{NAME}_{args.mode}.png"
+        extra = []
+    else:
+        as_png(tmp / "hud_")
+        bpy.ops.render.render(animation=True)
+        src = ["-i", str(tmp / "scene.mp4")]
+        hud_in = ["-framerate", str(FPS), "-start_number", "1", "-i", str(tmp / "hud_%04d.png")]
+        out = out_dir / f"{NAME}_{args.mode}.mp4"
+        extra = ["-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "17", "-pix_fmt", "yuv420p",
+                 "-c:a", "copy"]
+    for o in world_objs:
+        o.hide_render = False
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", *src, *hud_in,
+           "-filter_complex", "[0:v][1:v]overlay=0:0[v]" if extra else "[0:v][1:v]overlay=0:0",
+           *extra, str(out)]
+    subprocess.run(cmd, check=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+    print(f"[collision_pi] rendered {out}")
+
+
+mode = args.mode
+args.mode = "none"                      # finish() only saves the .blend; rendering is below
+physkit.finish(sc, NAME, args, style="question3d")
+args.mode = mode
+if mode != "none":
+    render_two_layers(sc, still if args.still else None)

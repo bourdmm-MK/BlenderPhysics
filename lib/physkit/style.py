@@ -54,6 +54,7 @@ def apply_question_style(scene, lighting: str = "FLAT"):
     shading.show_object_outline = True
     shading.background_type = "VIEWPORT"
     shading.background_color = (0.0, 0.0, 0.0)
+    scene.display.render_aa = "32"   # smooth edges on thin lines and small text
 
 
 def label_font():
