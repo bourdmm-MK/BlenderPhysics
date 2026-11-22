@@ -60,6 +60,16 @@ If PowerShell refuses to run the script, start it with
 | Model | What it shows |
 |---|---|
 | `pendulum` | Stand, string and bob. The swing comes from solving θ'' = −(g/L)·sin θ, not from hand animation. Length, start angle and gravity are at the top of the script. |
+| `two_slopes_spring` | Exam question: m and 2m slide down 60° slopes, hit m₃ = 3m on a spring at the same moment, stick, and oscillate. Drawn in the course style (flat 2D look on black). A Manim twin is in PhysicsAid `expermients/two_slopes_spring/`. `-mode preview -still` renders the impact frame. |
+
+## Two looks
+
+- **Object models** (like `pendulum`): realistic materials from `physkit/materials.py`.
+- **Physics-question scenes** (like `two_slopes_spring`): the shared course style from
+  `physkit/style.py` — black background, flat colours by meaning, serif italic labels,
+  mass labels inside bodies, axes behind objects. Call
+  `physkit.finish(scene, name, args, style="question")`. The full rules are in
+  PhysicsAid `knowledge/visual-style.md`.
 
 ## Adding a new model
 
