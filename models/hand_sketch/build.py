@@ -36,6 +36,13 @@ WRIST = dict(len=0.18, rad=0.105)
 FOLDED = [1.25, 1.55, 0.95]
 THETA = math.radians(90)          # angle between v and B
 
+# Pose: "three-finger" (this model) or "flat-palm" (models/hand_palm runs this script with
+# HAND_POSE set). Same frame for both: v along +x, B along -z (out of the palm face in the
+# open palm), F = v x B along +y (thumb).
+POSE = globals().get("HAND_POSE", "three-finger")
+FLAT = POSE == "flat-palm"
+NAME = "hand_palm" if FLAT else "hand_sketch"
+
 SKIN = (0.80, 0.52, 0.38)         # linear RGB of a warm skin tone
 NAIL = (0.98, 0.84, 0.82)
 
@@ -116,9 +123,12 @@ bpy.ops.object.transform_apply(scale=True)
 parts.append(cap)
 tips = {}
 tips["index"] = chain(Vector((0, KNUCKLE_Y["index"], 0)), X, Y, *FINGERS["index"], [0, 0, 0])
-tips["middle"] = chain(Vector((0, KNUCKLE_Y["middle"], 0)), X, Y, *FINGERS["middle"], [THETA, 0, 0])
-chain(Vector((0, KNUCKLE_Y["ring"], 0)), X, Y, *FINGERS["ring"], FOLDED)
-chain(Vector((0, KNUCKLE_Y["pinky"], 0)), X, Y, *FINGERS["pinky"], FOLDED)
+tips["middle"] = chain(Vector((0, KNUCKLE_Y["middle"], 0)), X, Y, *FINGERS["middle"],
+                       [0, 0, 0] if FLAT else [THETA, 0, 0])
+for k in ("ring", "pinky"):                     # folded in the three-finger pose, straight in the open palm
+    t_ = chain(Vector((0, KNUCKLE_Y[k], 0)), X, Y, *FINGERS[k], [0, 0, 0] if FLAT else FOLDED)
+    if FLAT:
+        tips[k] = t_
 tips["thumb"] = chain(Vector((-0.17, 0.20, 0)), Y, Z, *THUMB, [0, 0])
 # fleshy base of the thumb (thenar), so the thumb grows out of the palm
 bpy.ops.mesh.primitive_uv_sphere_add(radius=0.11, location=(-0.2, 0.13, -0.01))
@@ -159,6 +169,11 @@ GLOW = {   # finger axis start, direction, length (to the tip), radius, colour
                sum(FINGERS["middle"][0]) + 0.05, 0.049, COURSE["position"]),
     "thumb": (Vector((-0.17, 0.20, 0)), Y, sum(THUMB[0]) + 0.06, 0.058, COURSE["force"]),
 }
+if FLAT:   # all four straight fingers carry v; B is marked by a spot where it leaves the palm face
+    GLOW = {k: (Vector((0, KNUCKLE_Y[k], 0)), X, sum(FINGERS[k][0]) + 0.05, FINGERS[k][1][0],
+                COURSE["velocity"]) for k in KNUCKLE_Y}
+    GLOW["thumb"] = (Vector((-0.17, 0.20, 0)), Y, sum(THUMB[0]) + 0.06, 0.058, COURSE["force"])
+PALM_SPOT = Vector((-0.2, 0, -0.07))     # palm face, where B exits (open palm only)
 GLOW_TINT = 0.7          # how far the skin colour moves toward the vector colour
 
 
@@ -180,6 +195,10 @@ for i, vert in enumerate(hand.data.vertices):
         w = smooth01(0.02, 0.17, t) * (1 - smooth01(r * 1.2, r * 1.8, radial))
         if w > best_w:
             best_w, best_col = w, col
+    if FLAT and co.z < -0.02:
+        w = 1 - smooth01(0.05, 0.09, (co - PALM_SPOT).length)
+        if w > best_w:
+            best_w, best_col = w, COURSE["position"]
     glow_attr.data[i].color = (*best_col, best_w)
     k = GLOW_TINT * best_w
     exp_attr.data[i].color = tuple(min(1.0, SKIN[j] * (1 - k) + best_col[j] * k * 1.35) for j in range(3)) + (1.0,)
@@ -251,9 +270,9 @@ hand.data.materials.append(skin_material())
 import bmesh  # noqa: E402
 nail_mat = material("nail", NAIL, 0.12)
 nail_mat.node_tree.nodes["Principled BSDF"].inputs["Coat Weight"].default_value = 0.6
-for k in ("index", "middle", "thumb"):
+for k in tips:
     tip, d = tips[k]
-    up = X if k == "middle" else Z      # back of the finger (middle is bent toward -z)
+    up = X if (k == "middle" and not FLAT) else Z      # back of the finger (bent middle faces +x)
     r = FINGERS[k][1][-1] if k != "thumb" else THUMB[1][-1]
     a, b_ = r * 0.95, r * 0.8            # half-length along the finger, half-width
     me = bpy.data.meshes.new("nail")
@@ -290,6 +309,10 @@ starts = {"index": Vector((0, KNUCKLE_Y["index"], 0)),
           "middle": Vector((0, KNUCKLE_Y["middle"], 0)) ,
           "thumb": Vector((-0.17, 0.20, 0))}
 dirs = {"index": X, "middle": Vector((math.cos(THETA), 0, -math.sin(THETA))), "thumb": Y}
+if FLAT:   # v along the middle of the four fingers; B comes in at the back of the palm and leaves its face
+    starts["index"] = Vector((0, 0, 0))
+    starts["middle"] = Vector((-0.2, 0, 0.45))
+    dirs["middle"] = -Z
 cam_objs = []
 labels = []
 label_pts = []
@@ -348,9 +371,9 @@ for lab in labels:                      # labels always face the camera
     cr = lab.constraints.new("TRACK_TO")
     cr.target, cr.track_axis, cr.up_axis = cam, "TRACK_Z", "UP_Y"
 
-out = OUTPUT_ROOT / "hand_sketch"
+out = OUTPUT_ROOT / NAME
 out.mkdir(parents=True, exist_ok=True)
-bpy.ops.wm.save_as_mainfile(filepath=str(out / "hand_sketch.blend"))
+bpy.ops.wm.save_as_mainfile(filepath=str(out / f"{NAME}.blend"))
 
 try:
     sc.render.engine = "BLENDER_EEVEE"
@@ -362,7 +385,7 @@ sc.render.resolution_x, sc.render.resolution_y = 1280, 720
 sc.render.image_settings.file_format = "PNG"
 for name, loc in views.items():
     cam.location = center + loc
-    sc.render.filepath = str(out / f"hand_sketch_{name}.png")
+    sc.render.filepath = str(out / f"{NAME}_{name}.png")
     bpy.ops.render.render(write_still=True)
     print("[hand] rendered", sc.render.filepath)
 
@@ -385,7 +408,13 @@ dec.ratio = 0.35
 dec.show_render = False
 for o in bpy.data.objects:
     o.select_set(o.type == "MESH")
-bpy.ops.export_scene.gltf(filepath=str(out / "hand_sketch.glb"), export_format="GLB",
+bpy.ops.export_scene.gltf(filepath=str(out / f"{NAME}.glb"), export_format="GLB",
+                          use_selection=True, export_apply=True, export_yup=True)
+# a second copy with only the hand (skin + nails, no arrows or labels) for PhysicsLearn
+# whiteboards, which draw their own vectors along the fingers
+for o in bpy.data.objects:
+    o.select_set(o.type == "MESH" and (o.name == "hand" or o.name.startswith("nail_")))
+bpy.ops.export_scene.gltf(filepath=str(out / f"{NAME}_board.glb"), export_format="GLB",
                           use_selection=True, export_apply=True, export_yup=True)
 
 
@@ -412,7 +441,7 @@ hotspots = "\n".join(
  button {{ font:inherit; background:#222; color:#DDD; border:1px solid #555; border-radius:6px; padding:4px 12px; cursor:pointer; }}
 </style></head>
 <body>
-<model-viewer id="mv" src="hand_sketch.glb?{int(__import__('time').time())}" camera-controls
+<model-viewer id="mv" src="{NAME}.glb?{int(__import__('time').time())}" camera-controls
   camera-orbit="35deg 65deg 2.2m" field-of-view="35deg" exposure="0.95" environment-image="neutral"
   shadow-intensity="0" interaction-prompt="none">
 {hotspots}
