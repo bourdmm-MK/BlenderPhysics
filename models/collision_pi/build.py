@@ -48,23 +48,24 @@ NAME = "collision_pi"
 M_SMALL = 1.0              # kg
 RATIO_BASE = 100.0         # M/m = RATIO_BASE**n
 N_STAGES = 7               # n = 0..6  ->  up to 3 141 592 collisions
-V_BIG = -1.0               # m/s, big block's starting velocity (towards the wall)
-SMALL_SIDE = 0.30          # m
+V_BIG = -2.2               # m/s, big block's starting velocity (towards the wall)
+SMALL_SIDE = 0.42          # m
 SMALL_START = 0.60         # m, small block's left face (wall face at x = 0)
 BIG_START = 1.90           # m, big block's left face
 
 # ---------------- timing ----------------
 FPS = 24
-T_INTRO = 0.8              # s, blocks shown at rest before each run
+T_INTRO = 0.35             # s, blocks shown at rest before each run
+T_RESULT = 1.0             # s, the result ("off by ...") holds before the next run
 T_MAX_RUN = 9.0            # s, longest run (video time)
-X_EXIT = 4.4               # m, run ends once the big block's left face passes this
-T_AFTER = 0.7              # s, after the last collision before the run may end
-T_OUTRO = 4.0              # s, final hold with the full graph
-T_BURST = 2.0              # s of video over which a big pile-up of collisions is spread
+X_EXIT = 3.0               # m, run ends once the big block's left face passes this
+T_AFTER = 0.3              # s, after the last collision before the run may end
+T_OUTRO = 2.2              # s, final hold with the full graph
+T_BURST = 0.8              # s of video over which a big pile-up of collisions is spread
 
 
 def big_side(n):
-    return 0.45 + 0.10 * n
+    return 0.62 + 0.12 * n
 
 
 def simulate(ratio, n_frames, rate_cap):
@@ -131,8 +132,8 @@ for n in range(N_STAGES):
     STAGES.append(dict(n=n, frames=frames, hits=hits, count=len(hits),
                        start=t0, run_start=t0 + T_INTRO, run=T_run))
     print(f"   M/m = 100^{n}: {len(hits)} collisions, run {T_run:.2f} s")
-    t0 += T_INTRO + T_run
-T_TOTAL = t0 + T_OUTRO
+    t0 += T_INTRO + T_run + T_RESULT
+T_TOTAL = t0 - T_RESULT + T_OUTRO
 
 # ---------------- scene ----------------
 args = physkit.parse_args("Colliding blocks count pi")
@@ -162,7 +163,7 @@ def box(name, size, center, color):
 STRUCT = COURSE["structure"]
 M_COLOR = COURSE["position"]    # big block M: blue (and its symbol M everywhere)
 m_COLOR = COURSE["velocity"]    # small block m: yellow (and its symbol m everywhere)
-WALL_H = 1.4                    # m
+WALL_H = 1.6                    # m
 DEPTH = 1.6                     # floor depth (m)
 # floor (top at z = 0) and wall (face at x = 0), with hatch marks outside
 box("floor", (7.6, DEPTH, 0.04), (3.6, 0, -0.02), STRUCT)
@@ -472,12 +473,16 @@ for o in hud:
     o.location.y += SHIFT_Y
 
 
-def pop(o, f_on, f_off=None, full=None):
-    """Scale an object from 0 to full over 5 frames at f_on (and back to 0 at f_off)."""
+POP = (0.3, 0.7, 1.12, 1.0)
+POP_BIG = (0.4, 0.9, 1.3, 1.4, 1.25, 1.1, 1.0)      # a more noticeable entrance
+
+
+def pop(o, f_on, f_off=None, full=None, shape=POP):
+    """Scale an object from 0 to full over a few frames at f_on (and back to 0 at f_off)."""
     full = tuple(o.scale) if full is None else full
     o.scale = (0, 0, 0)
     o.keyframe_insert("scale", frame=1)
-    for k, a in enumerate((0.3, 0.7, 1.12, 1.0)):
+    for k, a in enumerate(shape):
         o.scale = tuple(c * a for c in full)
         o.keyframe_insert("scale", frame=f_on + k)
     if f_off is not None:
@@ -497,7 +502,8 @@ for n, st in enumerate(STAGES):
         pop(est_labels[n], f_done, f_next)
     if n == 0 and est_head is not None:
         pop(est_head, f_done)
-    pop(off_labels[n], f_done, f_next)
+    # the result pops in as the run ends, holds, and leaves when the next M/m appears
+    pop(off_labels[n], f_done, f_off, shape=POP_BIG)
 
 # live counter value per frame
 counts_by_frame = [0] * (F_END + 2)
