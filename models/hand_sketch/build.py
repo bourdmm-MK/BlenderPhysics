@@ -34,14 +34,15 @@ FINGERS = dict(
 THUMB = ([0.16, 0.13], [0.058, 0.050])
 WRIST = dict(len=0.18, rad=0.105)
 FOLDED = [1.25, 1.55, 0.95]
-THETA = math.radians(90)          # angle between v and B
+THETA_DEG = float(__import__("os").environ.get("HAND_THETA", "90"))   # angle between v and B (three fingers)
+THETA = math.radians(THETA_DEG)
 
 # Pose: "three-finger" (this model) or "flat-palm" (models/hand_palm runs this script with
 # HAND_POSE set). Same frame for both: v along +x, B along -z (out of the palm face in the
 # open palm), F = v x B along +y (thumb).
 POSE = globals().get("HAND_POSE", "three-finger")
 FLAT = POSE == "flat-palm"
-NAME = "hand_palm" if FLAT else "hand_sketch"
+NAME = "hand_palm" if FLAT else ("hand_sketch" if THETA_DEG == 90 else f"hand_sketch_{THETA_DEG:g}deg")
 
 SKIN = (0.80, 0.52, 0.38)         # linear RGB of a warm skin tone
 NAIL = (0.98, 0.84, 0.82)
@@ -272,7 +273,7 @@ nail_mat = material("nail", NAIL, 0.12)
 nail_mat.node_tree.nodes["Principled BSDF"].inputs["Coat Weight"].default_value = 0.6
 for k in tips:
     tip, d = tips[k]
-    up = X if (k == "middle" and not FLAT) else Z      # back of the finger (bent middle faces +x)
+    up = Vector((math.sin(THETA), 0, math.cos(THETA))) if (k == "middle" and not FLAT) else Z   # back of the (bent) middle finger
     r = FINGERS[k][1][-1] if k != "thumb" else THUMB[1][-1]
     a, b_ = r * 0.95, r * 0.8            # half-length along the finger, half-width
     me = bpy.data.meshes.new("nail")
