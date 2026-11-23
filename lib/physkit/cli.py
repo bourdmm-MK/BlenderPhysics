@@ -11,10 +11,12 @@ def parse_args(description: str = ""):
     --mode final    realistic Eevee render (~2-3 s/frame at 720p)
     --mode none     only build and save the .blend file (default)
     --still         render one image (the middle frame) instead of the video
+    --reel          vertical 9:16 frame for reels/shorts (--resolution is then the height)
     """
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--mode", choices=["none", "preview", "final"], default="none")
     parser.add_argument("--still", action="store_true")
+    parser.add_argument("--reel", action="store_true", help="vertical 9:16 frame")
     parser.add_argument("--resolution", type=int, default=720, help="height in pixels")
     return parser.parse_args(argv)

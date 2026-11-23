@@ -8,14 +8,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_ROOT = REPO_ROOT / "output"
 
 
-def configure_render(scene, mode: str, height: int = 720, style: str = "model"):
+def configure_render(scene, mode: str, height: int = 720, style: str = "model", reel: bool = False):
     """Set up the quick (Workbench) or realistic (Eevee) engine.
 
     style="question": the flat course look (see style.py) in every mode.
     style="question3d": the same colours with shaded 3D faces.
     """
     scene.render.resolution_y = height
-    scene.render.resolution_x = round(height * 16 / 9)
+    scene.render.resolution_x = round(height * (9 / 16 if reel else 16 / 9))
     scene.render.resolution_percentage = 100
     scene.view_settings.view_transform = "Standard"  # punchier colours than AgX
     if style in ("question", "question3d"):

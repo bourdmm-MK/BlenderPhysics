@@ -210,25 +210,30 @@ for n, b in enumerate(bigs):
         key_loc(b, AWAY, f_b)
 
 # ---------------- camera (slow drift so the 3D shows) ----------------
+REEL = args.reel           # vertical 9:16 frame for reels
 cam_data = bpy.data.cameras.new("Camera")
-cam_data.lens = 35
+cam_data.sensor_fit = "HORIZONTAL"     # lens/angle refer to the frame width in both formats
+cam_data.lens = 26 if REEL else 35
 cam = bpy.data.objects.new("Camera", cam_data)
 sc.collection.objects.link(cam)
 sc.camera = cam
-LOOK = Vector((3.0, 0.0, 1.75))
+# reel: look well above the blocks so they sit in the lower part of the tall frame
+LOOK = Vector((2.7, 0.0, 3.9)) if REEL else Vector((3.0, 0.0, 1.75))
 for f in range(1, F_END + 1):
     u = (f - 1) / max(1, F_END - 1)
     e = 0.5 - 0.5 * math.cos(math.pi * u)
-    pos = Vector((4.6 - 1.6 * e, -8.6, 3.0 + 0.4 * e))
+    pos = (Vector((3.5 - 1.2 * e, -7.2, 2.0 + 0.3 * e)) if REEL
+           else Vector((4.6 - 1.6 * e, -8.6, 3.0 + 0.4 * e)))
     cam.location = pos
     cam.rotation_euler = (LOOK - pos).to_track_quat("-Z", "Y").to_euler()
     cam.keyframe_insert("location", frame=f)
     cam.keyframe_insert("rotation_euler", frame=f)
 
 # ---------------- HUD: text and graph, fixed in front of the camera ----------------
-HUD_D = 4.0
-HUD_W = 2 * HUD_D * math.tan(cam_data.angle / 2)      # visible width at HUD_D
-EM = lambda fs: manim_em(fs, HUD_W)                    # noqa: E731
+HUD_W_WIDE = 2 * 4.0 * math.tan(math.atan(18 / 35))  # landscape HUD width: text sizes refer to it
+HUD_W = 2.7 if REEL else HUD_W_WIDE                    # visible HUD width (HUD metres)
+HUD_D = HUD_W / (2 * math.tan(cam_data.angle / 2))     # distance in front of the camera
+EM = lambda fs: manim_em(fs, HUD_W_WIDE)               # noqa: E731
 hud = []
 
 
@@ -291,18 +296,35 @@ def hud_disc(name, x, y, r, color):
 
 AXES, AUX, WHITE = COURSE["axes"], COURSE["aux"], COURSE["time"]
 OFF = COURSE["displacement"]     # orange: the distance from the goal (pi)
-HALF_W, HALF_H = HUD_W / 2, HUD_W * 9 / 32
+HALF_W = HUD_W / 2
+HALF_H = HUD_W * (16 / 18 if REEL else 9 / 32)
+
+# layout anchors: (landscape) readouts top-left, graph right, blocks below;
+# (reel) title, readouts, full-width graph, blocks, all kept out of the reel's
+# top bar, right-hand buttons and bottom caption area
+if REEL:
+    LX = -HALF_W + 0.15
+    ROW = [1.40, 1.18, 1.00, 0.83]                 # collisions, pi, estimate, off by
+    STAGE_POS = (HALF_W - 0.15, ROW[0], "RIGHT")   # M/m on the counter's line
+    GX0, GY0 = -HALF_W + 0.55, -0.32
+    SLOW_POS = (LX + 0.80, -0.62)        # over the empty space right of the wall
+    hud_tex(r"\text{Counting collisions gives }\pi", 42, WHITE, 0, 1.72, align="CENTER", name="title")
+else:
+    LX, TOP = -HALF_W + 0.18, HALF_H - 0.20
+    ROW = [TOP - 0.24, TOP - 0.44, TOP - 0.61, TOP - 0.78]
+    STAGE_POS = (LX, TOP, "LEFT")
+    GX0, GY0 = 0.12, -0.08
+    SLOW_POS = (GX0, GY0 - 0.30)
 
 # --- left: mass ratio, live counter, pi, result of the last run
-LX = -HALF_W + 0.18
 stage_labels = []
 for n in range(N_STAGES):
     body = r"\frac{M}{m} = 1" if n == 0 else rf"\frac{{M}}{{m}} = 10^{{{2 * n}}}"
-    stage_labels.append(hud_tex(body, 34, WHITE, LX, HALF_H - 0.20, name=f"stage_{n}"))
-hud_tex(r"\text{Collisions:}", 34, AUX, LX, HALF_H - 0.44, name="lbl_collisions")
+    stage_labels.append(hud_tex(body, 34, WHITE, STAGE_POS[0], STAGE_POS[1], align=STAGE_POS[2], name=f"stage_{n}"))
+hud_tex(r"\text{Collisions:}", 34, AUX, LX, ROW[0], name="lbl_collisions")
 counter = number("0", EM(44), WHITE, name="counter")
-hud_obj(counter, LX + 0.58, HALF_H - 0.44)
-hud_tex(r"\pi = 3.14159265\ldots", 30, AUX, LX, HALF_H - 0.64, name="lbl_pi")
+hud_obj(counter, LX + 0.58, ROW[0])
+hud_tex(r"\pi = 3.14159265\ldots", 30, AUX, LX, ROW[1], name="lbl_pi")
 
 
 def error_pct(n):
@@ -319,13 +341,12 @@ def pct_text(e):
 est_labels, off_labels = [], []
 for n, st in enumerate(STAGES):
     est = f"{st['count'] / 10 ** n:.{n}f}"
-    est_labels.append(hud_tex(rf"\text{{estimate}} = {est}", 30, WHITE, LX, HALF_H - 0.81, name=f"est_{n}"))
+    est_labels.append(hud_tex(rf"\text{{estimate}} = {est}", 30, WHITE, LX, ROW[2], name=f"est_{n}"))
     off_labels.append(hud_tex(rf"\text{{off by }} {pct_text(error_pct(n))}\,\%", 30, OFF, LX,
-                              HALF_H - 0.98, name=f"off_{n}"))
+                              ROW[3], name=f"off_{n}"))
 
 # --- right: graph of the distance from pi (percent, log scale) against M/m
-GX0, GY0 = 0.12, -0.08                # axes origin (HUD metres)
-GW, GH = 1.73, 1.10
+GW, GH = (1.60, 0.95) if REEL else (1.73, 1.10)     # axes size (HUD metres)
 DEC_TOP, DEC_BOT = 1, -5               # 10 % ... 0.00001 %
 
 
@@ -352,7 +373,7 @@ hud_tex(r"\text{off from }\pi\quad(\text{lower} = \text{closer})", 24, AUX, GX0 
         name="y_name")
 
 slow = number("", EM(28), COURSE["velocity"], name="slow_motion")
-hud_obj(slow, GX0, GY0 - 0.30)
+hud_obj(slow, *SLOW_POS)
 
 points, links, values = [], [], []
 for n, st in enumerate(STAGES):
@@ -527,6 +548,7 @@ still = frame_of(st4["run_start"] + st4["hits"][len(st4["hits"]) // 2])
 update(sc)
 
 
+TAG = "_reel" if REEL else ""
 SCENE_EXPOSURE = 0.7     # brightens the shaded 3D layer back towards the course colours
 
 
@@ -542,7 +564,7 @@ def render_two_layers(scene, still_frame):
 
     hud_set = set(hud) | {counter, slow}
     world_objs = [o for o in scene.objects if o not in hud_set and o.type != "CAMERA"]
-    configure_render(scene, args.mode, args.resolution, style="question3d")
+    configure_render(scene, args.mode, args.resolution, style="question3d", reel=REEL)
     settings = scene.render.image_settings
 
     def as_png(path):
@@ -586,14 +608,14 @@ def render_two_layers(scene, still_frame):
         scene.frame_set(still_frame)
         as_png(tmp / "hud.png")
         bpy.ops.render.render(write_still=True)
-        src, hud_in, out = ["-i", str(tmp / "scene.png")], ["-i", str(tmp / "hud.png")],             out_dir / f"{NAME}_{args.mode}.png"
+        src, hud_in, out = ["-i", str(tmp / "scene.png")], ["-i", str(tmp / "hud.png")],             out_dir / f"{NAME}{TAG}_{args.mode}.png"
         extra = []
     else:
         as_png(tmp / "hud_")
         bpy.ops.render.render(animation=True)
         src = ["-i", str(tmp / "scene.mp4")]
         hud_in = ["-framerate", str(FPS), "-start_number", "1", "-i", str(tmp / "hud_%04d.png")]
-        out = out_dir / f"{NAME}_{args.mode}.mp4"
+        out = out_dir / f"{NAME}{TAG}_{args.mode}.mp4"
         extra = ["-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "17", "-pix_fmt", "yuv420p",
                  "-c:a", "copy"]
     for o in world_objs:
