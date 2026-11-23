@@ -343,7 +343,7 @@ def pct_text(e):
 
 if REEL:
     LX = -HALF_W + 0.12
-    FS = dict(title=46, row=38, count=50, off=46, tick=22, value=21, axis=26, slow=28)
+    FS = dict(title=46, row=38, count=42, off=46, tick=22, value=21, axis=26, slow=28)
     Y = dict(title=1.50, pi=1.25, coll=1.00, off=0.76)
     GX0, GY0, GW, GH = -HALF_W + 0.42, -0.32, 1.50, 0.75
     Y_AXIS_NAME = GY0 + GH + 0.07
@@ -397,12 +397,14 @@ for n in range(N_STAGES):
     stage_labels.append(hud_tex(body, FS["row"], WHITE, 0.0, Y["coll"], name=f"stage_{n}"))
 W_STAGE = max(o.dimensions.x for o in stage_labels)
 # one row: "Collisions: 3,141,592   M/m = 10^12", centred in the reel, left-aligned otherwise
-G1, G2, G3 = 0.07, 0.16, 0.04
+G1, G2, G3 = 0.10, 0.16, 0.04
 total = lbl_coll.dimensions.x + G1 + W_COUNT + G2 + frac_right + G3 + W_STAGE
 x = -total / 2 if REEL else LX
 lbl_coll.location.x = x + lbl_coll.dimensions.x / 2
 x += lbl_coll.dimensions.x + G1
-hud_obj(counter, x, Y["coll"])
+# the counter sits on the same baseline as "Collisions:" (which has no descenders)
+counter.data.align_y = "BOTTOM_BASELINE"
+hud_obj(counter, x, Y["coll"] - lbl_coll.dimensions.y / 2)
 x += W_COUNT + G2
 for o in frac_objs:
     o.location.x += x
@@ -434,8 +436,15 @@ for n in range(N_STAGES):
     hud_tex("1" if n == 0 else f"10^{{{2 * n}}}", FS["tick"], AUX, gx(n), GY0 - 0.09, align="CENTER",
             name=f"xlab{n}")
 hud_row([("M", M_COLOR), ("/", AUX), ("m", m_COLOR)], FS["axis"], *XNAME_POS, align="RIGHT", name="x_name")
-hud_row([(r"\text{off from}", AUX), (r"\pi", PI_COLOR), (r"\quad(\text{lower} = \text{closer})", AUX)],
-        FS["axis"] - 2, Y_AXIS_NAME_X, Y_AXIS_NAME, name="y_name")
+y_name = hud_row([(r"\text{off from}", AUX), (r"\pi", PI_COLOR), (r"\quad(\text{lower} = \text{closer})", AUX)],
+                 FS["axis"] - 2, Y_AXIS_NAME_X, Y_AXIS_NAME, name="y_name")
+if REEL:
+    # "off by" exactly halfway between the counter's line and the graph's title
+    row_objs = [lbl_coll, *stage_labels] + [o for o in frac_objs if o.type == "CURVE"]
+    row_bottom = min(o.location.y - o.dimensions.y / 2 for o in row_objs)
+    graph_top = max(o.location.y + o.dimensions.y / 2 for o in y_name)
+    for o in off_labels:
+        o.location.y = (row_bottom + graph_top) / 2
 
 slow = number("", EM(FS["slow"]), COURSE["velocity"], name="slow_motion")
 hud_obj(slow, *SLOW_POS)
@@ -595,10 +604,14 @@ def make_sound(path):
         mix[a:b] += sig[:b - a]
 
     for n, st in enumerate(STAGES):
-        add(bell(notes[n % len(notes)], 0.22), st["run_start"] + st["run"] - 2 / FPS)
+        add(bell(notes[n % len(notes)], 0.07), st["run_start"] + st["run"] - 2 / FPS)
     t_end = STAGES[-1]["run_start"] + STAGES[-1]["run"] + 0.6
     for f0 in (523.25, 659.25, 783.99, 1046.5):
-        add(bell(f0, 0.05), t_end)       # soft closing chord (four notes together)
+        add(bell(f0, 0.022), t_end)      # soft closing chord (four notes together)
+    # final safety: no 50 ms stretch (a bell strike, a hard click) may be much louder than the rest
+    sw = int(0.05 * SR)
+    loud = np.sqrt(np.convolve(mix ** 2, np.ones(sw) / sw, mode="same")) + 1e-9
+    mix *= np.minimum(1.0, 1.6 * SOUND_LEVEL / loud)
     mix /= max(1e-9, np.abs(mix).max()) / 0.89
     pcm = (mix * 32767).astype("<i2")
     with wave.open(str(path), "wb") as wf:
