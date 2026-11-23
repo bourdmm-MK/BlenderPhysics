@@ -567,6 +567,58 @@ TOCK_PEAK = 0.25        # one single collision "tock" (about -12 dB peak)
 SOUND_LEVEL = 0.022     # dense collisions / tone, average level (about -33 dB)
 BELL_AMP = 0.035        # bell when a graph point lands
 CHORD_AMP = 0.012       # each of the four notes of the closing chord
+MUSIC = True            # soft background music under everything (set False for none)
+MUSIC_PAD = 0.0030      # each pad note (sum of the chord is about -46 dB average)
+MUSIC_ARP = 0.0070      # each soft arpeggio note, peak
+MUSIC_BPM = 96          # arpeggio pace: one note per eighth (0.31 s)
+
+# One chord per round, in C major like the bells, resolving to C at the end.
+# Frequencies in Hz: a low bass note plus three chord tones.
+CHORDS = [
+    (130.81, 196.00, 261.63, 329.63),   # C
+    (110.00, 164.81, 220.00, 261.63),   # Am
+    (87.31, 174.61, 220.00, 261.63),    # F
+    (98.00, 196.00, 246.94, 293.66),    # G
+    (82.41, 164.81, 196.00, 246.94),    # Em
+    (87.31, 174.61, 220.00, 261.63),    # F
+    (98.00, 196.00, 246.94, 293.66),    # G
+]
+CHORD_END = (130.81, 196.00, 261.63, 329.63)   # C, at the final result
+
+
+def make_music(n_samp, t_final):
+    """Soft pad + slow arpeggio, changing chord at the start of every round."""
+    t = np.arange(n_samp) / SR
+    music = np.zeros(n_samp)
+    starts = [st["start"] for st in STAGES] + [t_final]
+    chords = CHORDS[:len(STAGES)] + [CHORD_END]
+    ends = starts[1:] + [n_samp / SR]
+    eighth = 60.0 / MUSIC_BPM / 2
+    nt = np.arange(int(1.6 * SR)) / SR
+    for (a, b), chord in zip(zip(starts, ends), chords):
+        i0, i1 = int(a * SR), min(n_samp, int((b + 0.8) * SR))   # overlap 0.8 s into the next chord
+        seg = t[i0:i1] - a
+        env = np.minimum(1, seg / 0.5) * np.clip((b + 0.8 - a - seg) / 0.8, 0, 1)   # soft attack / release
+        for k, f in enumerate(chord):
+            amp = MUSIC_PAD * (1.3 if k == 0 else 1.0)
+            # two slightly detuned sines per note: a warm, slowly breathing pad
+            music[i0:i1] += amp * env * 0.5 * (np.sin(2 * np.pi * f * 0.998 * seg) +
+                                               np.sin(2 * np.pi * f * 1.002 * seg + 1.3))
+        # arpeggio: chord tones one octave up, rising and falling, one note per eighth
+        tones = [2 * f for f in chord[1:]]
+        pattern = tones + [tones[1]]
+        n_notes = int((b - a) / eighth)
+        for j in range(n_notes):
+            f = pattern[j % len(pattern)]
+            note = MUSIC_ARP * np.exp(-nt * 3.0) * np.minimum(1, nt / 0.01) * (
+                np.sin(2 * np.pi * f * nt) + 0.15 * np.sin(2 * np.pi * 2 * f * nt))
+            s0 = int((a + j * eighth) * SR)
+            s1 = min(n_samp, s0 + len(note))
+            if s0 < n_samp:
+                music[s0:s1] += note[:s1 - s0]
+    # fade in at the start and out over the last 2.5 s
+    music *= np.minimum(1, t / 1.5) * np.clip((n_samp / SR - 0.4 - t) / 2.5, 0, 1)
+    return music
 
 
 def make_sound(path):
@@ -623,6 +675,9 @@ def make_sound(path):
     sw = int(0.05 * SR)
     loud = np.sqrt(np.convolve(mix ** 2, np.ones(sw) / sw, mode="same")) + 1e-9
     mix *= np.minimum(1.0, 3.0 * SOUND_LEVEL / loud)
+    # background music is added after the limiter, so it never changes the other sounds
+    if MUSIC:
+        mix += make_music(n_samp, t_end)
     mix = np.clip(mix, -0.99, 0.99)
     pcm = (mix * 32767).astype("<i2")
     with wave.open(str(path), "wb") as wf:
