@@ -160,19 +160,21 @@ def box(name, size, center, color):
 
 
 STRUCT = COURSE["structure"]
-BODY = COURSE["body"]
+M_COLOR = COURSE["position"]    # big block M: blue (and its symbol M everywhere)
+m_COLOR = COURSE["velocity"]    # small block m: yellow (and its symbol m everywhere)
+WALL_H = 1.4                    # m
 DEPTH = 1.6                     # floor depth (m)
 # floor (top at z = 0) and wall (face at x = 0), with hatch marks outside
 box("floor", (7.6, DEPTH, 0.04), (3.6, 0, -0.02), STRUCT)
-box("wall", (0.06, DEPTH, 1.9), (-0.03, 0, 0.95), STRUCT)
-for i in range(13):
+box("wall", (0.06, DEPTH, WALL_H), (-0.03, 0, WALL_H / 2), STRUCT)
+for i in range(int(WALL_H / 0.145)):
     z = 0.08 + i * 0.145
     h = box(f"hatch_w{i}", (0.15, 0.012, 0.012), (-0.10, -DEPTH / 2 - 0.006, z - 0.05), STRUCT)
     h.rotation_euler = (0, math.radians(-45), 0)
 
-# blocks (sand fill, black LaTeX label on the front face)
-def labelled_block(name, side, label):
-    b = box(name, (side, side, side), (0, 0, side / 2), BODY)
+# blocks (m yellow, M blue, black LaTeX label on the front face)
+def labelled_block(name, side, label, color):
+    b = box(name, (side, side, side), (0, 0, side / 2), color)
     em = 0.32 * side
     lab = tex(label, em, COURSE["body_text"], name=f"{name}_label")
     if lab.dimensions.x > 0.82 * side:
@@ -182,11 +184,11 @@ def labelled_block(name, side, label):
     return b
 
 
-small = labelled_block("small", SMALL_SIDE, r"1\,\mathrm{kg}")
+small = labelled_block("small", SMALL_SIDE, r"1\,\mathrm{kg}", m_COLOR)
 bigs = []
 for n in range(N_STAGES):
     lbl = r"1\,\mathrm{kg}" if n == 0 else rf"10^{{{2 * n}}}\,\mathrm{{kg}}"
-    bigs.append(labelled_block(f"big_{n}", big_side(n), lbl))
+    bigs.append(labelled_block(f"big_{n}", big_side(n), lbl, M_COLOR))
 
 AWAY = (0, 0, -60)
 def key_loc(o, loc, f):
@@ -217,21 +219,25 @@ cam_data.lens = 26 if REEL else 35
 cam = bpy.data.objects.new("Camera", cam_data)
 sc.collection.objects.link(cam)
 sc.camera = cam
-# reel: look well above the blocks so they sit in the lower part of the tall frame
-LOOK = Vector((2.7, 0.0, 3.9)) if REEL else Vector((3.0, 0.0, 1.75))
+# The camera never tilts or turns: it only slides sideways, so the wall stays
+# vertical and meets the floor's front edge at a right angle. The blocks are
+# placed low in the frame with a lens shift instead of tilting the camera.
+cam.rotation_euler = (math.radians(90), 0, 0)
+if REEL:
+    CAM_Y, CAM_Z, X0, X1 = -5.15, 1.5, 3.1, 2.5
+    cam_data.shift_y = 0.255
+else:
+    CAM_Y, CAM_Z, X0, X1 = -7.6, 1.6, 3.4, 2.6
+    cam_data.shift_y = 0.12
 for f in range(1, F_END + 1):
     u = (f - 1) / max(1, F_END - 1)
     e = 0.5 - 0.5 * math.cos(math.pi * u)
-    pos = (Vector((3.5 - 1.2 * e, -7.2, 2.0 + 0.3 * e)) if REEL
-           else Vector((4.6 - 1.6 * e, -8.6, 3.0 + 0.4 * e)))
-    cam.location = pos
-    cam.rotation_euler = (LOOK - pos).to_track_quat("-Z", "Y").to_euler()
+    cam.location = (X0 + (X1 - X0) * e, CAM_Y, CAM_Z)
     cam.keyframe_insert("location", frame=f)
-    cam.keyframe_insert("rotation_euler", frame=f)
 
 # ---------------- HUD: text and graph, fixed in front of the camera ----------------
 HUD_W_WIDE = 2 * 4.0 * math.tan(math.atan(18 / 35))  # landscape HUD width: text sizes refer to it
-HUD_W = 2.7 if REEL else HUD_W_WIDE                    # visible HUD width (HUD metres)
+HUD_W = 2.25 if REEL else HUD_W_WIDE                    # visible HUD width (HUD metres)
 HUD_D = HUD_W / (2 * math.tan(cam_data.angle / 2))     # distance in front of the camera
 EM = lambda fs: manim_em(fs, HUD_W_WIDE)               # noqa: E731
 hud = []
@@ -296,35 +302,33 @@ def hud_disc(name, x, y, r, color):
 
 AXES, AUX, WHITE = COURSE["axes"], COURSE["aux"], COURSE["time"]
 OFF = COURSE["displacement"]     # orange: the distance from the goal (pi)
+PI_COLOR = COURSE["acceleration"]  # teal: pi, the goal
 HALF_W = HUD_W / 2
 HALF_H = HUD_W * (16 / 18 if REEL else 9 / 32)
 
-# layout anchors: (landscape) readouts top-left, graph right, blocks below;
-# (reel) title, readouts, full-width graph, blocks, all kept out of the reel's
-# top bar, right-hand buttons and bottom caption area
-if REEL:
-    LX = -HALF_W + 0.15
-    ROW = [1.40, 1.18, 1.00, 0.83]                 # collisions, pi, estimate, off by
-    STAGE_POS = (HALF_W - 0.15, ROW[0], "RIGHT")   # M/m on the counter's line
-    GX0, GY0 = -HALF_W + 0.55, -0.32
-    SLOW_POS = (LX + 0.80, -0.62)        # over the empty space right of the wall
-    hud_tex(r"\text{Counting collisions gives }\pi", 42, WHITE, 0, 1.72, align="CENTER", name="title")
-else:
-    LX, TOP = -HALF_W + 0.18, HALF_H - 0.20
-    ROW = [TOP - 0.24, TOP - 0.44, TOP - 0.61, TOP - 0.78]
-    STAGE_POS = (LX, TOP, "LEFT")
-    GX0, GY0 = 0.12, -0.08
-    SLOW_POS = (GX0, GY0 - 0.30)
 
-# --- left: mass ratio, live counter, pi, result of the last run
-stage_labels = []
-for n in range(N_STAGES):
-    body = r"\frac{M}{m} = 1" if n == 0 else rf"\frac{{M}}{{m}} = 10^{{{2 * n}}}"
-    stage_labels.append(hud_tex(body, 34, WHITE, STAGE_POS[0], STAGE_POS[1], align=STAGE_POS[2], name=f"stage_{n}"))
-hud_tex(r"\text{Collisions:}", 34, AUX, LX, ROW[0], name="lbl_collisions")
-counter = number("0", EM(44), WHITE, name="counter")
-hud_obj(counter, LX + 0.58, ROW[0])
-hud_tex(r"\pi = 3.14159265\ldots", 30, AUX, LX, ROW[1], name="lbl_pi")
+def hud_row(parts, fs, x, y, align="LEFT", name="row"):
+    """Several LaTeX pieces in different colours on one line: parts = [(body, colour), ...]."""
+    objs = [tex(body, EM(fs), col, name=f"{name}_{i}") for i, (body, col) in enumerate(parts)]
+    gap = 0.30 * EM(fs)
+    total = sum(o.dimensions.x for o in objs) + gap * (len(objs) - 1)
+    x0 = x - (total / 2 if align == "CENTER" else total if align == "RIGHT" else 0)
+    for o in objs:
+        hud_obj(o, x0 + o.dimensions.x / 2, y)
+        x0 += o.dimensions.x + gap
+    return objs
+
+
+def frac_Mm(x_left, y, fs, name="frac"):
+    """The ratio M/m as a stacked fraction, M in blue over m in yellow. Returns its right edge."""
+    em = EM(fs) * 0.85
+    top = tex("M", em, M_COLOR, name=f"{name}_M")
+    bot = tex("m", em, m_COLOR, name=f"{name}_m")
+    w = max(top.dimensions.x, bot.dimensions.x) + 0.25 * em
+    hud_obj(top, x_left + w / 2, y + 0.52 * em)
+    hud_obj(bot, x_left + w / 2, y - 0.50 * em)
+    hud_seg(f"{name}_bar", (x_left, y), (x_left + w, y), 0.05 * em, WHITE)
+    return x_left + w
 
 
 def error_pct(n):
@@ -337,17 +341,50 @@ def pct_text(e):
     return f"{e:.{max(0, 1 - math.floor(math.log10(e)))}f}"
 
 
-# the result of each run: the estimate and how far it is from pi
+if REEL:
+    LX = -HALF_W + 0.12
+    FS = dict(title=46, row=38, count=50, off=46, tick=22, value=21, axis=26, slow=28)
+    Y = dict(title=1.50, pi=1.27, est=1.10, coll=0.88, off=0.66)
+    GX0, GY0, GW, GH = -HALF_W + 0.42, -0.32, 1.50, 0.75
+    Y_AXIS_NAME = GY0 + GH + 0.07
+    XNAME_POS = (GX0 + GW, GY0 - 0.21)
+    SLOW_POS = (GX0 + 0.10, GY0 - 0.21)     # right of the wall
+    hud_row([(r"\text{Counting collisions gives}", WHITE), (r"\pi", PI_COLOR)], FS["title"], 0, Y["title"],
+            align="CENTER", name="title")
+else:
+    LX = -HALF_W + 0.18
+    FS = dict(title=0, row=32, count=44, off=34, tick=20, value=20, axis=26, slow=28)
+    Y = dict(pi=HALF_H - 0.20, est=HALF_H - 0.38, coll=HALF_H - 0.62, off=HALF_H - 0.86)
+    GX0, GY0, GW, GH = 0.12, -0.08, 1.73, 1.10
+    Y_AXIS_NAME = GY0 + GH + 0.03
+    XNAME_POS = (GX0 + GW, GY0 - 0.17)
+    SLOW_POS = (GX0, GY0 - 0.30)
+OFF_X = 0.0 if REEL else LX + 0.9
+
+# pi and the estimate, with their digits lined up under each other
+XEQ = LX + 1.0                              # where the numbers start
+hud_row([(r"\pi", PI_COLOR), ("=", AUX)], FS["row"], XEQ - 0.04, Y["pi"], align="RIGHT", name="pi_lbl")
+hud_tex(r"3.14159265\ldots", FS["row"], PI_COLOR, XEQ, Y["pi"], name="pi_val")
+est_head = hud_tex(r"\text{estimate} =", FS["row"], WHITE, XEQ - 0.04, Y["est"], align="RIGHT", name="est_lbl")
 est_labels, off_labels = [], []
 for n, st in enumerate(STAGES):
-    est = f"{st['count'] / 10 ** n:.{n}f}"
-    est_labels.append(hud_tex(rf"\text{{estimate}} = {est}", 30, WHITE, LX, ROW[2], name=f"est_{n}"))
-    off_labels.append(hud_tex(rf"\text{{off by }} {pct_text(error_pct(n))}\,\%", 30, OFF, LX,
-                              ROW[3], name=f"off_{n}"))
+    est_labels.append(hud_tex(f"{st['count'] / 10 ** n:.{n}f}", FS["row"], WHITE, XEQ, Y["est"], name=f"est_{n}"))
+    off_labels.append(hud_tex(rf"\text{{off by }} {pct_text(error_pct(n))}\,\%", FS["off"], OFF, OFF_X, Y["off"],
+                              align="CENTER" if REEL else "LEFT", name=f"off_{n}"))
 
-# --- right: graph of the distance from pi (percent, log scale) against M/m
-GW, GH = (1.60, 0.95) if REEL else (1.73, 1.10)     # axes size (HUD metres)
-DEC_TOP, DEC_BOT = 1, -5               # 10 % ... 0.00001 %
+# live counter, and the mass ratio of this run (M blue over m yellow)
+lbl_coll = hud_tex(r"\text{Collisions:}", FS["row"], AUX, LX, Y["coll"], name="lbl_collisions")
+counter = number("0", EM(FS["count"]), WHITE, name="counter")
+hud_obj(counter, LX + lbl_coll.dimensions.x + 0.07, Y["coll"])
+RX = HALF_W - (0.62 if REEL else 0.95)      # the ratio sits at the right end of the counter's line
+rx = frac_Mm(RX, Y["coll"], FS["row"], name="ratio")
+stage_labels = []
+for n in range(N_STAGES):
+    body = "= 1" if n == 0 else f"= 10^{{{2 * n}}}"
+    stage_labels.append(hud_tex(body, FS["row"], WHITE, rx + 0.04, Y["coll"], name=f"stage_{n}"))
+
+# --- graph of the distance from pi (percent, log scale) against M/m
+DEC_TOP, DEC_BOT = 1, (-6 if REEL else -5)   # 10 % ... 0.000001 %
 
 
 def gx(n):
@@ -355,7 +392,7 @@ def gx(n):
 
 
 def gy(err_pct):
-    return GY0 + 0.07 + (math.log10(err_pct) - DEC_BOT) / (DEC_TOP - DEC_BOT) * (GH - 0.20)
+    return GY0 + 0.07 + (math.log10(err_pct) - DEC_BOT) / (DEC_TOP - DEC_BOT) * (GH - 0.17)
 
 
 hud_arrow("x_axis", (GX0, GY0), (GX0 + GW, GY0), AXES)
@@ -364,33 +401,39 @@ for d in range(DEC_BOT, DEC_TOP + 1):
     y = gy(10.0 ** d)
     hud_seg(f"ytick{d}", (GX0 - 0.025, y), (GX0 + 0.025, y), 0.006, AXES)
     lab = "1" if d == 0 else (f"{10 ** d}" if d > 0 else f"0.{'0' * (-d - 1)}1")
-    hud_tex(rf"{lab}\,\%", 20, AUX, GX0 - 0.05, y, align="RIGHT", name=f"ylab{d}")
+    hud_tex(rf"{lab}\,\%", FS["tick"], AUX, GX0 - 0.05, y, align="RIGHT", name=f"ylab{d}")
 for n in range(N_STAGES):
     hud_seg(f"xtick{n}", (gx(n), GY0 - 0.025), (gx(n), GY0 + 0.025), 0.006, AXES)
-    hud_tex("1" if n == 0 else f"10^{{{2 * n}}}", 20, AUX, gx(n), GY0 - 0.08, align="CENTER", name=f"xlab{n}")
-hud_tex(r"M/m", 26, AUX, GX0 + GW, GY0 - 0.17, align="RIGHT", name="x_name")
-hud_tex(r"\text{off from }\pi\quad(\text{lower} = \text{closer})", 24, AUX, GX0 + 0.06, GY0 + GH + 0.03,
-        name="y_name")
+    hud_tex("1" if n == 0 else f"10^{{{2 * n}}}", FS["tick"], AUX, gx(n), GY0 - 0.09, align="CENTER",
+            name=f"xlab{n}")
+hud_row([("M", M_COLOR), ("/", AUX), ("m", m_COLOR)], FS["axis"], *XNAME_POS, align="RIGHT", name="x_name")
+hud_row([(r"\text{off from}", AUX), (r"\pi", PI_COLOR), (r"\quad(\text{lower} = \text{closer})", AUX)],
+        FS["axis"] - 2, GX0 + 0.06, Y_AXIS_NAME, name="y_name")
 
-slow = number("", EM(28), COURSE["velocity"], name="slow_motion")
+slow = number("", EM(FS["slow"]), COURSE["velocity"], name="slow_motion")
 hud_obj(slow, *SLOW_POS)
 
 points, links, values = [], [], []
 for n, st in enumerate(STAGES):
     e = error_pct(n)
-    p = hud_disc(f"point_{n}", gx(n), gy(e), 0.022, OFF)
+    p = hud_disc(f"point_{n}", gx(n), gy(e), 0.024, OFF)
     points.append(p)
     if n:
-        links.append(hud_seg(f"link_{n}", (gx(n - 1), gy(error_pct(n - 1))), (gx(n), gy(e)), 0.006, OFF,
+        links.append(hud_seg(f"link_{n}", (gx(n - 1), gy(error_pct(n - 1))), (gx(n), gy(e)), 0.007, OFF,
                              z=-HUD_D + 0.001))
     else:
         links.append(None)
-    val = hud_tex(rf"{pct_text(e)}\,\%", 20, OFF, gx(n) + 0.03, gy(e) + 0.06, align="LEFT", name=f"value_{n}")
+    last = REEL and n == N_STAGES - 1             # last label under its point (clear of the side buttons)
+    val = hud_tex(rf"{pct_text(e)}\,\%", FS["value"], OFF, gx(n) + (0 if last else 0.03),
+                  gy(e) + (-0.07 if last else 0.065), align="CENTER" if last else "LEFT", name=f"value_{n}")
     values.append(val)
 
+# the camera's lens shift moves the whole view; move the text with it so it stays put
+SHIFT_Y = cam_data.shift_y * HUD_W          # shift is measured in frame widths (sensor fit horizontal)
 for o in hud:
     o.parent = cam
     o.matrix_parent_inverse.identity()
+    o.location.y += SHIFT_Y
 
 
 def pop(o, f_on, f_off=None, full=None):
@@ -415,6 +458,8 @@ for n, st in enumerate(STAGES):
     pop(stage_labels[n], frame_of(st["start"]), f_off)
     f_next = frame_of(STAGES[n + 1]["run_start"] + STAGES[n + 1]["run"]) - 2 if n + 1 < N_STAGES else None
     pop(est_labels[n], f_done, f_next)
+    if n == 0:
+        pop(est_head, f_done)
     pop(off_labels[n], f_done, f_next)
 
 # live counter value per frame
