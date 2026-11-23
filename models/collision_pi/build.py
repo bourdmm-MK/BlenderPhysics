@@ -344,9 +344,10 @@ def pct_text(e):
 if REEL:
     LX = -HALF_W + 0.12
     FS = dict(title=46, row=38, count=50, off=46, tick=22, value=21, axis=26, slow=28)
-    Y = dict(title=1.50, pi=1.27, est=1.10, coll=0.88, off=0.66)
+    Y = dict(title=1.50, pi=1.25, coll=1.00, off=0.76)
     GX0, GY0, GW, GH = -HALF_W + 0.42, -0.32, 1.50, 0.75
     Y_AXIS_NAME = GY0 + GH + 0.07
+    Y_AXIS_NAME_X = GX0 - 0.30
     XNAME_POS = (GX0 + GW, GY0 - 0.21)
     SLOW_POS = (GX0 + 0.10, GY0 - 0.21)     # right of the wall
     hud_row([(r"\text{Counting collisions gives}", WHITE), (r"\pi", PI_COLOR)], FS["title"], 0, Y["title"],
@@ -357,31 +358,57 @@ else:
     Y = dict(pi=HALF_H - 0.20, est=HALF_H - 0.38, coll=HALF_H - 0.62, off=HALF_H - 0.86)
     GX0, GY0, GW, GH = 0.12, -0.08, 1.73, 1.10
     Y_AXIS_NAME = GY0 + GH + 0.03
+    Y_AXIS_NAME_X = GX0 + 0.06
     XNAME_POS = (GX0 + GW, GY0 - 0.17)
     SLOW_POS = (GX0, GY0 - 0.30)
 OFF_X = 0.0 if REEL else LX + 0.9
 
-# pi and the estimate, with their digits lined up under each other
-XEQ = LX + 1.0                              # where the numbers start
-hud_row([(r"\pi", PI_COLOR), ("=", AUX)], FS["row"], XEQ - 0.04, Y["pi"], align="RIGHT", name="pi_lbl")
-hud_tex(r"3.14159265\ldots", FS["row"], PI_COLOR, XEQ, Y["pi"], name="pi_val")
-est_head = hud_tex(r"\text{estimate} =", FS["row"], WHITE, XEQ - 0.04, Y["est"], align="RIGHT", name="est_lbl")
-est_labels, off_labels = [], []
+est_head, est_labels, off_labels = None, [], []
+if REEL:
+    # pi, centred under the title (the reel has no "estimate" line)
+    hud_row([(r"\pi", PI_COLOR), ("=", AUX), (r"3.14159265\ldots", PI_COLOR)], FS["row"], 0, Y["pi"],
+            align="CENTER", name="pi_row")
+else:
+    # pi and the estimate, with their digits lined up under each other
+    XEQ = LX + 1.0                              # where the numbers start
+    hud_row([(r"\pi", PI_COLOR), ("=", AUX)], FS["row"], XEQ - 0.04, Y["pi"], align="RIGHT", name="pi_lbl")
+    hud_tex(r"3.14159265\ldots", FS["row"], PI_COLOR, XEQ, Y["pi"], name="pi_val")
+    est_head = hud_tex(r"\text{estimate} =", FS["row"], WHITE, XEQ - 0.04, Y["est"], align="RIGHT",
+                       name="est_lbl")
+    for n, st in enumerate(STAGES):
+        est_labels.append(hud_tex(f"{st['count'] / 10 ** n:.{n}f}", FS["row"], WHITE, XEQ, Y["est"],
+                                  name=f"est_{n}"))
 for n, st in enumerate(STAGES):
-    est_labels.append(hud_tex(f"{st['count'] / 10 ** n:.{n}f}", FS["row"], WHITE, XEQ, Y["est"], name=f"est_{n}"))
     off_labels.append(hud_tex(rf"\text{{off by }} {pct_text(error_pct(n))}\,\%", FS["off"], OFF, OFF_X, Y["off"],
                               align="CENTER" if REEL else "LEFT", name=f"off_{n}"))
 
 # live counter, and the mass ratio of this run (M blue over m yellow)
 lbl_coll = hud_tex(r"\text{Collisions:}", FS["row"], AUX, LX, Y["coll"], name="lbl_collisions")
-counter = number("0", EM(FS["count"]), WHITE, name="counter")
-hud_obj(counter, LX + lbl_coll.dimensions.x + 0.07, Y["coll"])
-RX = HALF_W - (0.62 if REEL else 0.95)      # the ratio sits at the right end of the counter's line
-rx = frac_Mm(RX, Y["coll"], FS["row"], name="ratio")
+counter = number("3,141,592", EM(FS["count"]), WHITE, name="counter")   # widest value, to measure
+bpy.context.view_layer.update()
+W_COUNT = counter.dimensions.x
+counter.data.body = "0"
+n_before = len(hud)
+frac_right = frac_Mm(0.0, Y["coll"], FS["row"], name="ratio")
+frac_objs = hud[n_before:]
 stage_labels = []
 for n in range(N_STAGES):
     body = "= 1" if n == 0 else f"= 10^{{{2 * n}}}"
-    stage_labels.append(hud_tex(body, FS["row"], WHITE, rx + 0.04, Y["coll"], name=f"stage_{n}"))
+    stage_labels.append(hud_tex(body, FS["row"], WHITE, 0.0, Y["coll"], name=f"stage_{n}"))
+W_STAGE = max(o.dimensions.x for o in stage_labels)
+# one row: "Collisions: 3,141,592   M/m = 10^12", centred in the reel, left-aligned otherwise
+G1, G2, G3 = 0.07, 0.16, 0.04
+total = lbl_coll.dimensions.x + G1 + W_COUNT + G2 + frac_right + G3 + W_STAGE
+x = -total / 2 if REEL else LX
+lbl_coll.location.x = x + lbl_coll.dimensions.x / 2
+x += lbl_coll.dimensions.x + G1
+hud_obj(counter, x, Y["coll"])
+x += W_COUNT + G2
+for o in frac_objs:
+    o.location.x += x
+x += frac_right + G3
+for o in stage_labels:
+    o.location.x = x + o.dimensions.x / 2
 
 # --- graph of the distance from pi (percent, log scale) against M/m
 DEC_TOP, DEC_BOT = 1, (-6 if REEL else -5)   # 10 % ... 0.000001 %
@@ -408,7 +435,7 @@ for n in range(N_STAGES):
             name=f"xlab{n}")
 hud_row([("M", M_COLOR), ("/", AUX), ("m", m_COLOR)], FS["axis"], *XNAME_POS, align="RIGHT", name="x_name")
 hud_row([(r"\text{off from}", AUX), (r"\pi", PI_COLOR), (r"\quad(\text{lower} = \text{closer})", AUX)],
-        FS["axis"] - 2, GX0 + 0.06, Y_AXIS_NAME, name="y_name")
+        FS["axis"] - 2, Y_AXIS_NAME_X, Y_AXIS_NAME, name="y_name")
 
 slow = number("", EM(FS["slow"]), COURSE["velocity"], name="slow_motion")
 hud_obj(slow, *SLOW_POS)
@@ -457,8 +484,9 @@ for n, st in enumerate(STAGES):
     f_off = frame_of(STAGES[n + 1]["start"]) if n + 1 < N_STAGES else None
     pop(stage_labels[n], frame_of(st["start"]), f_off)
     f_next = frame_of(STAGES[n + 1]["run_start"] + STAGES[n + 1]["run"]) - 2 if n + 1 < N_STAGES else None
-    pop(est_labels[n], f_done, f_next)
-    if n == 0:
+    if est_labels:
+        pop(est_labels[n], f_done, f_next)
+    if n == 0 and est_head is not None:
         pop(est_head, f_done)
     pop(off_labels[n], f_done, f_next)
 
@@ -519,6 +547,7 @@ for ob in bpy.data.objects:
 
 # ---------------- sound ----------------
 SR = 44100
+SOUND_LEVEL = 0.035     # loudest allowed average level of the collision sound (about -29 dB)
 
 
 def make_sound(path):
@@ -548,6 +577,10 @@ def make_sound(path):
     phase = 2 * np.pi * np.cumsum(freq) / SR
     tone = (np.sin(phase) + 0.35 * np.sin(2 * phase) + 0.15 * np.sin(3 * phase)) * 0.28 * wgt
     mix = clicks * (1 - 0.75 * wgt) + tone
+    # level the volume: long dense stretches (the tone) may not be louder than single clicks
+    lw = int(0.3 * SR)
+    loud = np.sqrt(np.convolve(mix ** 2, np.ones(lw) / lw, mode="same")) + 1e-9
+    mix *= np.minimum(1.0, SOUND_LEVEL / loud)
     # 3) a bell note as each graph point lands (rising pentatonic), chord at the end
     notes = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.5, 1174.7]
     bt = np.arange(int(2.5 * SR)) / SR
@@ -565,7 +598,7 @@ def make_sound(path):
         add(bell(notes[n % len(notes)], 0.22), st["run_start"] + st["run"] - 2 / FPS)
     t_end = STAGES[-1]["run_start"] + STAGES[-1]["run"] + 0.6
     for f0 in (523.25, 659.25, 783.99, 1046.5):
-        add(bell(f0, 0.12), t_end)
+        add(bell(f0, 0.05), t_end)       # soft closing chord (four notes together)
     mix /= max(1e-9, np.abs(mix).max()) / 0.89
     pcm = (mix * 32767).astype("<i2")
     with wave.open(str(path), "wb") as wf:
