@@ -562,7 +562,11 @@ for ob in bpy.data.objects:
 
 # ---------------- sound ----------------
 SR = 44100
-SOUND_LEVEL = 0.035     # loudest allowed average level of the collision sound (about -29 dB)
+# Fixed levels (no automatic boost at the end), as fractions of full scale:
+TOCK_PEAK = 0.25        # one single collision "tock" (about -12 dB peak)
+SOUND_LEVEL = 0.022     # dense collisions / tone, average level (about -33 dB)
+BELL_AMP = 0.035        # bell when a graph point lands
+CHORD_AMP = 0.012       # each of the four notes of the closing chord
 
 
 def make_sound(path):
@@ -578,11 +582,12 @@ def make_sound(path):
     # 1) the tock of each collision (wood-like: two decaying partials)
     kt = np.arange(int(0.03 * SR)) / SR
     tock = np.exp(-kt * 180) * (np.sin(2 * np.pi * 1900 * kt) + 0.6 * np.sin(2 * np.pi * 820 * kt))
+    tock *= TOCK_PEAK / np.abs(tock).max()
     nfft = 1 << (n_samp + len(tock)).bit_length()
     clicks = np.fft.irfft(np.fft.rfft(imp, nfft) * np.fft.rfft(tock, nfft), nfft)[:n_samp]
     # limit dense bursts to a steady loudness
     env = np.sqrt(np.convolve(clicks ** 2, np.ones(win) / win, mode="same")) + 1e-9
-    clicks *= np.minimum(1.0, 0.35 / env)
+    clicks *= np.minimum(1.0, SOUND_LEVEL / env)
     # 2) when collisions come too fast to hear one by one: a tone that follows the rate
     lr = np.log10(np.maximum(rate, 1.0))
     wgt = np.clip((lr - 2.0) / 1.0, 0, 1)            # 100/s -> 0, 1000/s -> 1
@@ -590,7 +595,7 @@ def make_sound(path):
     freq = 180.0 * np.clip(rate / 100.0, 1, None) ** 0.18
     freq = np.minimum(freq, 1400.0)
     phase = 2 * np.pi * np.cumsum(freq) / SR
-    tone = (np.sin(phase) + 0.35 * np.sin(2 * phase) + 0.15 * np.sin(3 * phase)) * 0.28 * wgt
+    tone = (np.sin(phase) + 0.35 * np.sin(2 * phase) + 0.15 * np.sin(3 * phase)) * 1.2 * SOUND_LEVEL * wgt
     mix = clicks * (1 - 0.75 * wgt) + tone
     # level the volume: long dense stretches (the tone) may not be louder than single clicks
     lw = int(0.3 * SR)
@@ -610,15 +615,15 @@ def make_sound(path):
         mix[a:b] += sig[:b - a]
 
     for n, st in enumerate(STAGES):
-        add(bell(notes[n % len(notes)], 0.07), st["run_start"] + st["run"] - 2 / FPS)
+        add(bell(notes[n % len(notes)], BELL_AMP), st["run_start"] + st["run"] - 2 / FPS)
     t_end = STAGES[-1]["run_start"] + STAGES[-1]["run"] + 0.6
     for f0 in (523.25, 659.25, 783.99, 1046.5):
-        add(bell(f0, 0.022), t_end)      # soft closing chord (four notes together)
+        add(bell(f0, CHORD_AMP), t_end)      # soft closing chord (four notes together)
     # final safety: no 50 ms stretch (a bell strike, a hard click) may be much louder than the rest
     sw = int(0.05 * SR)
     loud = np.sqrt(np.convolve(mix ** 2, np.ones(sw) / sw, mode="same")) + 1e-9
-    mix *= np.minimum(1.0, 1.6 * SOUND_LEVEL / loud)
-    mix /= max(1e-9, np.abs(mix).max()) / 0.89
+    mix *= np.minimum(1.0, 3.0 * SOUND_LEVEL / loud)
+    mix = np.clip(mix, -0.99, 0.99)
     pcm = (mix * 32767).astype("<i2")
     with wave.open(str(path), "wb") as wf:
         wf.setnchannels(1)
