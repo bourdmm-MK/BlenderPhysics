@@ -567,6 +567,7 @@ TOCK_PEAK = 0.25        # one single collision "tock" (about -12 dB peak)
 SOUND_LEVEL = 0.022     # dense collisions / tone, average level (about -33 dB)
 BELL_AMP = 0.035        # bell when a graph point lands
 CHORD_AMP = 0.012       # each of the four notes of the closing chord
+MASTER_GAIN = 0.8       # overall volume of the whole track (effects + music)
 MUSIC = True            # soft background music under everything (set False for none)
 MUSIC_PAD = 0.0030      # each pad note (sum of the chord is about -46 dB average)
 MUSIC_ARP = 0.0070      # each soft arpeggio note, peak
@@ -678,6 +679,7 @@ def make_sound(path):
     # background music is added after the limiter, so it never changes the other sounds
     if MUSIC:
         mix += make_music(n_samp, t_end)
+    mix *= MASTER_GAIN
     mix = np.clip(mix, -0.99, 0.99)
     pcm = (mix * 32767).astype("<i2")
     with wave.open(str(path), "wb") as wf:
